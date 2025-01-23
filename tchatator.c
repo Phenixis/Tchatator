@@ -33,17 +33,6 @@ char *trim_newline(const char *str)
     return trimmed_str;
 }
 
-int is_number(const char *str)
-{
-    while (*str)
-    {
-        if (!isdigit(*str))
-            return 0;
-        str++;
-    }
-    return 1;
-}
-
 void read_param_file(struct param *params)
 {
     FILE *file = fopen(".tchatator", "r");
@@ -93,6 +82,22 @@ char *get_param(struct param *params, const char *name)
     return NULL;
 }
 
+char send_answer(int cnx, struct param *params, char *code)
+{
+    char *value = get_param(params, code);
+    char message[1024] = "";
+    if (value)
+    {
+        strcat(strcat(strcat(strcat(message, code), "/"), value), "\n\0");
+        write(cnx, message, strlen(message));
+        printf("> : %s", message);
+        return 1;
+    } else {
+        return send_answer(cnx, params, "500");
+    }
+    return 0;
+}
+
 int main()
 {
     struct param params[100];
@@ -126,7 +131,7 @@ int main()
         {
             if (errno == EADDRINUSE)
             {
-                printf("Port %d is already in use, trying port %d\n", port, port + 1);
+                printf("Port %d is already in use, trying port %d\n\n", port, port + 1);
                 if (port > 8089)
                 {
                     perror("No available ports");
@@ -148,7 +153,7 @@ int main()
     printf("Bind: %d on port %d\n", ret, port);
 
     // Mise en écoute de la socket
-    ret = listen(sock, 10);
+    ret = listen(sock, atoi(get_param(params, "max_pending_connections")));
     if (ret == -1)
     {
         perror("Listen failed");
@@ -170,50 +175,172 @@ int main()
     char buffer[1024];
     int len = read(cnx, buffer, sizeof(buffer) - 1);
     buffer[len] = '\0';
-    int pong_count = 0;
 
     while (len > 0)
     {
         char *trimmed_buffer = trim_newline(buffer);
-        printf("Read: %s\n", trimmed_buffer);
-        if (strcmp(trimmed_buffer, "PING") == 0)
+        printf("< : %s\n", trimmed_buffer);
+        if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
         {
-            pong_count++;
-            snprintf(buffer, sizeof(buffer), "PONG n°%d\r\n", pong_count);
-            len = strlen(buffer);
-        }
-        else if (strcmp(trimmed_buffer, "HELLO") == 0)
-        {
-            strcpy(buffer, "COUCOU LES GENS\r\n");
-            len = strlen(buffer);
-        }
-        else if (strcmp(trimmed_buffer, "/deconnexion") == 0)
-        {
-            printf("Closing connection\n");
-            free(trimmed_buffer);
-            break;
-        }
-        else
-        {
-            char *star_pos = strchr(trimmed_buffer, '*');
-            if (star_pos != NULL)
+            if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
             {
-                *star_pos = '\0';
-                char *part1 = trimmed_buffer;
-                char *part2 = star_pos + 1;
-
-                if (is_number(part1) && is_number(part2))
-                {
-                    int num1 = atoi(part1);
-                    int num2 = atoi(part2);
-                    int result = num1 * num2;
-                    snprintf(buffer, sizeof(buffer), "%s*%s=%d\r\n", part1, part2, result);
-                    len = strlen(buffer);
-                }
+                write(cnx, "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n", 45);
+                send_answer(cnx, params, "200");
+            }
+            else
+            {
+                send_answer(cnx, params, "200");
+                break;
             }
         }
-        write(cnx, buffer, len);
-        printf("Write: %s\n", buffer);
+        else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
+            {
+                write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
+                send_answer(cnx, params, "200");
+            }
+            else
+            {
+                send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
+            {
+            write(cnx, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
+            {
+            write(cnx, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/conversation -h") == 0 || strcmp(trimmed_buffer, "/conversation --help") == 0)
+            {
+            write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
+            {
+            write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/modifie ", 9) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
+            {
+            write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/supprime ", 10) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
+            {
+            write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
+            {
+            write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/ban ", 5) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/ban -h") == 0 || strcmp(trimmed_buffer, "/ban --help") == 0)
+            {
+            write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/deban ", 7) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
+            {
+            write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
+            {
+            write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/logs -h") == 0 || strcmp(trimmed_buffer, "/logs --help") == 0)
+            {
+            write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
+            send_answer(cnx, params, "200");
+            }
+            else
+            {
+            send_answer(cnx, params, "501");
+            }
+        }
+        else {
+            send_answer(cnx, params, "404");
+        }
+        
         free(trimmed_buffer);
         len = read(cnx, buffer, sizeof(buffer) - 1);
         buffer[len] = '\0';
