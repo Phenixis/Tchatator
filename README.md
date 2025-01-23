@@ -1,0 +1,36 @@
+# TO-DO
+
+- [ ] Login -> 200/OK
+- [ ] Login -> 401/UNAUTHORIZED
+- [ ] Logout -> 200/OK
+- [ ] Send Message -> 200/OK
+- [ ] Send Message -> 413/PAYLOAD TOO LARGE
+- [ ] Send Message -> 404/NOT FOUND
+- [ ] List Unread Messages -> 200/OK
+- [ ] List Unread Messages -> 204/NO CONTENT
+- [ ] List Unread Messages -> 416/RANGE NOT SATISFIABLE
+- [ ] Get Message History -> 200/OK
+- [ ] Get Message History -> 204/NO CONTENT
+- [ ] Get Message History -> 404/NOT FOUND
+- [ ] Get Message History -> 416/RANGE NOT SATISFIABLE
+- [ ] Get Message Info -> 200/OK
+- [ ] Get Message Info -> 404/NOT FOUND
+- [ ] Get Message Info -> 403/FORBIDDEN
+- [ ] Edit Message -> 200/OK
+- [ ] Edit Message -> 404/NOT FOUND
+- [ ] Edit Message -> 403/FORBIDDEN
+- [ ] Delete Message -> 200/OK
+- [ ] Delete Message -> 404/NOT FOUND
+- [ ] Delete Message -> 403/FORBIDDEN
+- [ ] Block Client -> 200/OK
+- [ ] Block Client -> 409/CONFLICT
+- [ ] Block Client -> 404/NOT FOUND
+- [ ] Ban Client -> 200/OK
+- [ ] Ban Client -> 409/CONFLICT
+- [ ] Ban Client -> 404/NOT FOUND
+- [ ] Unban Client -> 200/OK
+- [ ] Unban Client -> 404/NOT FOUND
+- [ ] Sync Settings -> 200/OK
+- [ ] Sync Settings -> 404/NOT FOUND
+- [ ] Get Logs -> 200/OK
+- [ ] Get Logs -> 204/NO CONTENT
