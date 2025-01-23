@@ -11,6 +11,7 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - le nombre de requête maxi par minute
 - le nombre de requête maxi par heure
 - La clé d'API d'administration
+- Le nombre de connexion en file d'attente
 
 # Pactocole
 
