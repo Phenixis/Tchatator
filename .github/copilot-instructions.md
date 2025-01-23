@@ -20,6 +20,11 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 À toute commande, le SERVICE peut renvoyer les codes suivants :
 - `429/TOO MANY REQUESTS` : Limite de requêtes atteinte.
 - `401/UNAUTHORIZED` : Connexion non identifiée ou clé d'API invalide.
+- `404/NOT FOUND` : La commande n'est pas reconnue.
+- `500/SERVER ERROR` : Le serveur a rencontré une erreur imprévue.
+- `501/NOT IMPLEMENTED` : La commande est reconnue mais n'est pas encore fonctionnelle.
+
+À toute commande, le CLIENT peut ajouter l'option `-n` ou `--help` pour avoir plus d'informations sur comment utiliser la commande.
 
 ## Identification
 ### Connexion
