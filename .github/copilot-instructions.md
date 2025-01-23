@@ -5,13 +5,14 @@ Ci-dessous, tu trouveras le protocole de communication à respecter pour que le 
 Le chat sera écrit en langage C et doit mettre en oeuvre une programmation de sockets.
 
 Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
-- port d'écoute
-- nombre maxi de messages
-- taille maxi d'un message
-- le nombre de requête maxi par minute
-- le nombre de requête maxi par heure
+- Port d'écoute
+- Nombre maxi de messages
+- Taille maxi d'un message
+- Le nombre de requête maxi par minute
+- Le nombre de requête maxi par heure
 - La clé d'API d'administration
 - Le nombre de connexion en file d'attente
+- Les codes de réponses
 
 # Pactocole
 
