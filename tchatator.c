@@ -79,7 +79,7 @@ int main()
     }
 
     // Mise en écoute de la socket
-    ret = listen(sock, 1);
+    ret = listen(sock, 10);
     if (ret == -1) {
         perror("Listen failed");
         close(sock);
