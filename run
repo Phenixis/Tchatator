@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <source_file.c>"
+    exit 1
+fi
+
+gcc "$1" -o "${1%.c}.out"
+if [ $? -eq 0 ]; then
+    ./"${1%.c}.out"
+    rm -f "${1%.c}.out"
+else
+    echo "Compilation failed."
+fi
