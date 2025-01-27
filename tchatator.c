@@ -139,7 +139,7 @@ PGconn *get_connection(struct param *params)
     return conn;
 }
 
-char *execute(PGconn *conn, char *query)
+PGresult *execute(PGconn *conn, char *query)
 {
     PGresult *res = PQexec(conn, query);
     if (PQresultStatus(res) != PGRES_TUPLES_OK)
@@ -148,11 +148,7 @@ char *execute(PGconn *conn, char *query)
         PQclear(res);
         exit(EXIT_FAILURE);
     }
-
-    char *result = PQgetvalue(res, 0, 0);
-
-    PQclear(res);
-    return result;
+    return res;
 }
 
 int main()
@@ -189,7 +185,7 @@ int main()
         {
             if (errno == EADDRINUSE)
             {
-                printf("Port %d is already in use, trying port %d\n\n", port, port + 1);
+                printf("Port %d is already in use, trying port %d\n", port, port + 1);
                 if (port > 8089)
                 {
                     perror("No available ports");
@@ -232,6 +228,7 @@ int main()
 
     PGconn *conn = get_connection(params);
     char buffer[1024];
+    char id_compte_client[1024];
     int len = read(cnx, buffer, sizeof(buffer) - 1);
     buffer[len] = '\0';
 
@@ -248,6 +245,7 @@ int main()
             }
             else
             {
+                strcpy(id_compte_client, "");
                 send_answer(cnx, params, "200");
                 break;
             }
@@ -259,9 +257,29 @@ int main()
                 write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
                 send_answer(cnx, params, "200");
             }
+            else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
+            {
+                char *api_key = trimmed_buffer + 11;
+                char query[256];
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
+
+                PGresult *res = execute(conn, query);
+
+                if (PQntuples(res) > 0)
+                {
+                    strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+                    send_answer(cnx, params, "200");
+                }
+                else
+                {
+                    send_answer(cnx, params, "401");
+                }
+
+                PQclear(res);
+            }
             else
             {
-                send_answer(cnx, params, "501");
+                send_answer(cnx, params, "404");
             }
         }
         else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
