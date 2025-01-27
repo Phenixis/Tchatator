@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <libpq-fe.h>
 
 struct param
 {
@@ -55,16 +56,23 @@ void read_param_file(struct param *params)
             char *comment = strchr(value, '#');
             if (comment)
             {
-            *comment = '\0';
+                *comment = '\0';
             }
         }
 
         if (name && value)
         {
+            
             params[index].name = trim_newline(name);
             params[index].value = trim_newline(value);
             index++;
         }
+    }
+
+    for (int i = index; i < 100; i++)
+    {
+        params[i].name = NULL;
+        params[i].value = NULL;
     }
 
     fclose(file);
@@ -92,23 +100,73 @@ char send_answer(int cnx, struct param *params, char *code)
         write(cnx, message, strlen(message));
         printf("> : %s", message);
         return 1;
-    } else {
+    }
+    else
+    {
         return send_answer(cnx, params, "500");
     }
     return 0;
+}
+
+void exit_on_error(PGconn *conn)
+{
+    fprintf(stderr, "Connection to database failed: %s\n", PQerrorMessage(conn));
+    PQfinish(conn);
+    exit(EXIT_FAILURE);
+}
+
+PGconn *get_connection(struct param *params)
+{
+    char *host = get_param(params, "db_host");
+    char *port = get_param(params, "db_port");
+    char *dbname = get_param(params, "db_name");
+    char *user = get_param(params, "db_user");
+    char *password = get_param(params, "db_password");
+    char conninfo[1024];
+    sprintf(conninfo, "host=%s port=%s dbname=%s user=%s password=%s", host, port, dbname, user, password);
+
+    // Connect to the database
+    PGconn *conn = PQconnectdb(conninfo);
+
+    // Check if the connection was successful
+    if (PQstatus(conn) != CONNECTION_OK)
+    {
+        exit_on_error(conn);
+    }
+
+    printf("Connected to the database successfully!\n");
+
+    return conn;
+}
+
+char *execute(PGconn *conn, char *query)
+{
+    PGresult *res = PQexec(conn, query);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    {
+        fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        exit(EXIT_FAILURE);
+    }
+
+    char *result = PQgetvalue(res, 0, 0);
+
+    PQclear(res);
+    return result;
 }
 
 int main()
 {
     struct param params[100];
     read_param_file(params);
+
     int sock;
-    int ret;
     struct sockaddr_in addr;
+    int ret;
+    int port = atoi(get_param(params, "socket_port"));
     int size;
     int cnx;
     struct sockaddr_in conn_addr;
-    int port = atoi(get_param(params, "port"));
 
     // Création de la socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -172,6 +230,7 @@ int main()
     }
     printf("Accept: %d\n", cnx);
 
+    PGconn *conn = get_connection(params);
     char buffer[1024];
     int len = read(cnx, buffer, sizeof(buffer) - 1);
     buffer[len] = '\0';
@@ -209,138 +268,139 @@ int main()
         {
             if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
             {
-            write(cnx, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
         {
             if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
             {
-            write(cnx, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
         {
             if (strcmp(trimmed_buffer, "/conversation -h") == 0 || strcmp(trimmed_buffer, "/conversation --help") == 0)
             {
-            write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
         {
             if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
             {
-            write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/modifie ", 9) == 0)
         {
             if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
             {
-            write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/supprime ", 10) == 0)
         {
             if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
             {
-            write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
         {
             if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
             {
-            write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/ban ", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/ban -h") == 0 || strcmp(trimmed_buffer, "/ban --help") == 0)
             {
-            write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/deban ", 7) == 0)
         {
             if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
             {
-            write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
             {
-            write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
         else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/logs -h") == 0 || strcmp(trimmed_buffer, "/logs --help") == 0)
             {
-            write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
-            send_answer(cnx, params, "200");
+                write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
+                send_answer(cnx, params, "200");
             }
             else
             {
-            send_answer(cnx, params, "501");
+                send_answer(cnx, params, "501");
             }
         }
-        else {
+        else
+        {
             send_answer(cnx, params, "404");
         }
-        
+
         free(trimmed_buffer);
         len = read(cnx, buffer, sizeof(buffer) - 1);
         buffer[len] = '\0';
