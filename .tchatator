@@ -1,11 +1,15 @@
-
-port=8080 # Port d'écoute
+socket_port=8080 # Port d'écoute
 max_messages=100 # Nombre maxi de messages
 max_message_size=1000 # Taille maxi d'un message (en caractères)
 max_requests_per_minute=12 # Nombre de requêtes maxi par minute
 max_requests_per_hour=90 # Nombre de requêtes maxi par heure
 admin_api_key=your_admin_api_key_here # Clé d'API d'administration
 max_pending_connections=10 # Nombre de connexions en file d'attente
+db_host=fnoc.ventsdouest.dev # Nom d'hôte
+db_port=5432
+db_name=sae
+db_user=sae
+db_password=conflits-hiSSez-p1lar
 200=OK
 204=NO CONTENT
 401=UNAUTHORIZED
