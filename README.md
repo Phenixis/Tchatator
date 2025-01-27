@@ -1,36 +1,38 @@
-# TO-DO
+# À FAIRE
 
-- [ ] Login -> 200/OK
-- [ ] Login -> 401/UNAUTHORIZED
-- [ ] Logout -> 200/OK
-- [ ] Send Message -> 200/OK
-- [ ] Send Message -> 413/PAYLOAD TOO LARGE
-- [ ] Send Message -> 404/NOT FOUND
-- [ ] List Unread Messages -> 200/OK
-- [ ] List Unread Messages -> 204/NO CONTENT
-- [ ] List Unread Messages -> 416/RANGE NOT SATISFIABLE
-- [ ] Get Message History -> 200/OK
-- [ ] Get Message History -> 204/NO CONTENT
-- [ ] Get Message History -> 404/NOT FOUND
-- [ ] Get Message History -> 416/RANGE NOT SATISFIABLE
-- [ ] Get Message Info -> 200/OK
-- [ ] Get Message Info -> 404/NOT FOUND
-- [ ] Get Message Info -> 403/FORBIDDEN
-- [ ] Edit Message -> 200/OK
-- [ ] Edit Message -> 404/NOT FOUND
-- [ ] Edit Message -> 403/FORBIDDEN
-- [ ] Delete Message -> 200/OK
-- [ ] Delete Message -> 404/NOT FOUND
-- [ ] Delete Message -> 403/FORBIDDEN
-- [ ] Block Client -> 200/OK
-- [ ] Block Client -> 409/CONFLICT
-- [ ] Block Client -> 404/NOT FOUND
-- [ ] Ban Client -> 200/OK
-- [ ] Ban Client -> 409/CONFLICT
-- [ ] Ban Client -> 404/NOT FOUND
-- [ ] Unban Client -> 200/OK
-- [ ] Unban Client -> 404/NOT FOUND
-- [ ] Sync Settings -> 200/OK
-- [ ] Sync Settings -> 404/NOT FOUND
-- [ ] Get Logs -> 200/OK
-- [ ] Get Logs -> 204/NO CONTENT
+Pour les requêtes à la base de données, lors de la connexion, l'id du compte client est enregistré dans id_compte_client.
+
+- [x] Connexion -> 200/OK
+- [x] Connexion -> 401/UNAUTHORIZED
+- [x] Déconnexion -> 200/OK
+- [ ] Envoi de message -> 200/OK
+- [ ] Envoi de message -> 413/PAYLOAD TOO LARGE
+- [ ] Envoi de message -> 404/NOT FOUND
+- [ ] Liste des messages non lus -> 200/OK
+- [ ] Liste des messages non lus -> 204/NO CONTENT
+- [ ] Liste des messages non lus -> 416/RANGE NOT SATISFIABLE
+- [ ] Historique des messages -> 200/OK
+- [ ] Historique des messages -> 204/NO CONTENT
+- [ ] Historique des messages -> 404/NOT FOUND
+- [ ] Historique des messages -> 416/RANGE NOT SATISFIABLE
+- [ ] Informations sur un message -> 200/OK
+- [ ] Informations sur un message -> 404/NOT FOUND
+- [ ] Informations sur un message -> 403/FORBIDDEN
+- [ ] Modification d'un message -> 200/OK
+- [ ] Modification d'un message -> 404/NOT FOUND
+- [ ] Modification d'un message -> 403/FORBIDDEN
+- [ ] Suppression d'un message -> 200/OK
+- [ ] Suppression d'un message -> 404/NOT FOUND
+- [ ] Suppression d'un message -> 403/FORBIDDEN
+- [ ] Blocage d'un client -> 200/OK
+- [ ] Blocage d'un client -> 409/CONFLICT
+- [ ] Blocage d'un client -> 404/NOT FOUND
+- [ ] Bannissement d'un client -> 200/OK
+- [ ] Bannissement d'un client -> 409/CONFLICT
+- [ ] Bannissement d'un client -> 404/NOT FOUND
+- [ ] Levage d'un bannissement -> 200/OK
+- [ ] Levage d'un bannissement -> 404/NOT FOUND
+- [ ] Synchronisation des paramètres -> 200/OK
+- [ ] Synchronisation des paramètres -> 404/NOT FOUND
+- [ ] Récupération des logs -> 200/OK
+- [ ] Récupération des logs -> 204/NO CONTENT
