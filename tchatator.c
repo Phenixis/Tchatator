@@ -434,8 +434,12 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
             {
-                write(cnx, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
+                write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
+            // Si pas connecté ou admin, aucun message non lu (no content)
+            else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0) {
+                send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
             }
             else
             {

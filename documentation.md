@@ -46,18 +46,29 @@ Pour communiquer avec le service, utiliser n'importe quel outil de connexion en 
 ## Liste des requêtes
 Une fois connecté au service, vous pouvez profiter d'une multitude de requêtes dont vous obtiendez les détails avec la syntaxe ```/<commande> -h```. Certaines commandes sont spécifiques à chaque rôle
 
-##### Identification
-- /connexion {API_KEY}
-- /deconnexion
+#### Identification
+| Commande       | Pour          |
+|----------------|---------------|
+| /connexion     | Tous          |
+| /deconnexion   | Tous |
 
-##### Messagerie
-- /message {id_client} {message}
-- /conversation {id_client} {?page=0}
-- /info {id_message} {?page=0}
+#### Messagerie
+| Commande                 | Pour          |
+|--------------------------|---------------|
+| /message {id_client} {message} | Tous        |
+| /liste                   | <span class="role client">Client</span>, <span class="role pro">Pro</span>        |
+| /conversation {id_client} {?page=0} | <span class="role pro">Pro</span>        |
+| /info {id_message} {?page=0}  | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 
-##### Bannissement
-- /ban {id_client}
-- /deban {id_client}
+#### Bannissement
+| Commande     | Pour          |
+|--------------|---------------|
+| /bloque {id_client} | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
+| /ban {id_client}    | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
+| /deban {id_client}  | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
 
-##### Paramétrage
-- /sync
+#### Paramétrage
+| Commande | Pour          |
+|----------|---------------|
+| /sync    | <span class="role admin">Admin</span> |
+| /logs    | <span class="role admin">Admin</span> |
