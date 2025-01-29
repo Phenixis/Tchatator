@@ -1,0 +1,175 @@
+#!/bin/bash
+
+mkfifo to_tchatator
+mkfifo from_tchator
+
+./run tchatator.c -d &
+
+# On attend quelques secondes pour s'assurer que le programme tchatator est bien lancé
+sleep 1
+
+while true; do
+    if [ -n "$(ps aux | grep tchatator | grep -v grep)" ]; then
+        break
+    fi
+    sleep 1
+done
+
+# On récupère le port d'écoute du programme tchatator
+socket_port=$(grep "Socket bind sur le port" tchatator.log | tail -n 1 | awk -F' ' '{print $NF}')
+
+# On lance ensuite telnet en localhost sur le port d'écoute récupéré
+telnet localhost $socket_port
+
+echo "Résultat attendu :"
+echo "404/NOT FOUND"
+echo "200/OK"
+
+rm to_tchatator
+rm from_tchatator
+
+# Commande pour test
+# /connexion clé_invalide
+# /deconnexion
+
+# # Connexion avec clé invalide
+# /connexion clé_invalide
+
+# # Déconnexion sans connexion
+# /deconnexion
+
+# # Flow d'administrateur ###########################################################################################################################################################################################
+# echo "Début du flow d'administrateur"
+# ./tchatator.out &
+
+# # On attend quelques secondes pour s'assurer que le programme tchatator est bien lancé
+# sleep 5
+
+# while true; do
+#     if [ -n "$(ps aux | grep tchatator | grep -v grep)" ]; then
+#         break
+#     fi
+#     sleep 1
+# done
+
+# # On récupère le port d'écoute du programme tchatator
+# socket_port=$(grep "Socket bind sur le port" tchatator.log | tail -n 1 | awk -F' ' '{print $NF}')
+
+# # On lance ensuite telnet en localhost sur le port d'écoute récupéré
+# telnet localhost $socket_port
+
+# # Connexion
+# /connexion tchatator_FNOC_TO_THE_TOP
+
+# # Blocage d'un client
+# /bloque {id_client}
+# /bloque {id_client_deja_bloque}
+# /bloque {id_client_inexistant}
+
+# # Bannissement d'un client
+# /ban {id_client}
+# /ban {id_client_inexistant}
+# /ban {id_client_deja_banni}
+
+# # Levage d'un bannissement
+# /deban {id_client}
+# /deban {id_client_non_banni}
+# /deban {id_client_inexistant}
+
+# # Paramétrage
+# /sync
+
+# # Logs
+# /logs {?nb_logs=50}
+
+# # Déconnexion
+# /deconnexion
+
+# # Flow CLIENT Membre ###########################################################################################################################################################################################
+# echo "Début du flow client membre"
+# ./tchatator.out &
+
+# # On attend quelques secondes pour s'assurer que le programme tchatator est bien lancé
+# sleep 5
+
+# while true; do
+#     if [ -n "$(ps aux | grep tchatator | grep -v grep)" ]; then
+#         break
+#     fi
+#     sleep 1
+# done
+
+# # On récupère le port d'écoute du programme tchatator
+# socket_port=$(grep "Socket bind sur le port" tchatator.log | tail -n 1 | awk -F' ' '{print $NF}')
+
+# # On lance ensuite telnet en localhost sur le port d'écoute récupéré
+# telnet localhost $socket_port
+
+# /connexion tchatator_21d625bb0d35d205fc4bc9408
+
+# /message {id_client} {message}
+# /message {id_client} {message_trop_long}
+
+# # Déconnexion
+# /deconnexion
+
+# # Flow CLIENT Professionnel #######################################################################################################################################################################################
+# echo "Début du flow client professionnel"
+# ./tchatator.out &
+
+# # On attend quelques secondes pour s'assurer que le programme tchatator est bien lancé
+# sleep 5
+
+# while true; do
+#     if [ -n "$(ps aux | grep tchatator | grep -v grep)" ]; then
+#         break
+#     fi
+#     sleep 1
+# done
+
+# # On récupère le port d'écoute du programme tchatator
+# socket_port=$(grep "Socket bind sur le port" tchatator.log | tail -n 1 | awk -F' ' '{print $NF}')
+
+# # On lance ensuite telnet en localhost sur le port d'écoute récupéré
+# telnet localhost $socket_port
+
+# /connexion tchatator_81cdc23c473d3b39ffd36f226
+
+# /message {id_client} {message}
+# /message {id_client} {message_trop_long}
+# /message {id_client_bloque} {message}
+# /message {id_client_inexistant} {message}
+
+# # Réception des messages non lus
+# /liste {page=0}
+# /liste {page=0}
+# /liste {page=invalide}
+
+# # Réception d'un historique de messages
+# /conversation {id_client} {?page=0}
+# /conversation {id_client} {?page=0}
+# /conversation {id_client_inexistant} {?page=0}
+# /conversation {id_client} {?page=invalide}
+
+# # Réception des informations d'un message
+# /info {id_message}
+# /info {id_message_inexistant}
+# /info {id_message_interdit}
+
+# # Modification d'un message
+# /modifie {id_message} {nouveau_message}
+# /modifie {id_message_inexistant} {nouveau_message}
+# /modifie {id_message_interdit} {nouveau_message}
+
+# # Suppression d'un message
+# /supprime {id_message}
+# /supprime {id_message_inexistant}
+# /supprime {id_message_interdit}
+
+# # Blocage d'un client
+# /bloque {id_client}
+# /bloque {id_client_deja_bloque}
+# /bloque {id_client_inexistant}
+
+# # Déconnexion
+# /deconnexion
