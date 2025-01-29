@@ -1,4 +1,10 @@
-# À FAIRE
+# Tchatator
+
+## BUGS
+
+- [ ] Aucune file d'attente n'est gérée.
+
+## À FAIRE
 
 Pour les requêtes à la base de données, lors de la connexion, l'id du compte client est enregistré dans id_compte_client.
 
@@ -34,5 +40,4 @@ Pour les requêtes à la base de données, lors de la connexion, l'id du compte 
 - [ ] Levage d'un bannissement -> 404/NOT FOUND
 - [ ] Synchronisation des paramètres -> 200/OK
 - [ ] Synchronisation des paramètres -> 404/NOT FOUND
-- [ ] Récupération des logs -> 200/OK
-- [ ] Récupération des logs -> 204/NO CONTENT
+- [x] Récupération des logs -> 200/OK
