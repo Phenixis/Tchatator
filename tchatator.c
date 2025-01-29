@@ -583,10 +583,14 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
-            else
+            else if (strcmp(id_compte_client, "admin") == 0)
             {
                 read_param_file(params, param_file);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
+            else
+            {
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/logs", 5) == 0)

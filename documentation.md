@@ -56,5 +56,8 @@ Une fois connecté au service, vous pouvez profiter d'une multitude de requêtes
 - /info {id_message} {?page=0}
 
 ##### Bannissement
+- /ban {id_client}
+- /deban {id_client}
 
 ##### Paramétrage
+- /sync
