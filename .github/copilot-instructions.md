@@ -109,7 +109,6 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - **Commande** : `/sync`
 - **Réponses possibles** :
   - `200/OK` : Paramétrage relu.
-  - `404/NOT FOUND` : Fichier de paramétrage introuvable.
 
 ## Logs
 - **Commande** : `/logs {?nb_logs=50}`

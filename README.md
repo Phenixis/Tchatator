@@ -39,5 +39,4 @@ Pour les requêtes à la base de données, lors de la connexion, l'id du compte 
 - [ ] Levage d'un bannissement -> 200/OK
 - [ ] Levage d'un bannissement -> 404/NOT FOUND
 - [ ] Synchronisation des paramètres -> 200/OK
-- [ ] Synchronisation des paramètres -> 404/NOT FOUND
 - [x] Récupération des logs -> 200/OK
