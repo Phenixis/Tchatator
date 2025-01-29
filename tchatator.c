@@ -177,7 +177,7 @@ PGconn *get_connection(struct param *params, int verbose)
 PGresult *execute(PGconn *conn, char *query)
 {
     PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
     {
         fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
         PQclear(res);
