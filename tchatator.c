@@ -186,7 +186,7 @@ PGresult *execute(PGconn *conn, char *query)
     return res;
 }
 
-int id_client_existe(PGconn *conn, char *id_client)
+int client_existe(PGconn *conn, char *id_client)
 {
     char query[256];
     snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE id_compte = '%s';", id_client);
@@ -500,7 +500,7 @@ int main(int argc, char *argv[])
             else if (strcmp(id_compte_client, "admin") == 0)
             {
                 char *id_client = trimmed_buffer + 5;
-                if (id_client_existe(conn, id_client) == 0)
+                if (client_existe(conn, id_client) == 0)
                 {
                     send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     continue;
@@ -533,7 +533,7 @@ int main(int argc, char *argv[])
             else if (strcmp(id_compte_client, "admin") == 0)
             {
                 char *id_client = trimmed_buffer + 7;
-                if (id_client_existe(conn, id_client) == 0)
+                if (client_existe(conn, id_client) == 0)
                 {
                     send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     continue;
