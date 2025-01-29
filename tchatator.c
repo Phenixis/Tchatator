@@ -360,6 +360,9 @@ int main(int argc, char *argv[])
                 if (PQntuples(res) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+                    char update_query[256];
+                    snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id = '%s';", id_compte_client);
+                    execute(conn, update_query);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
