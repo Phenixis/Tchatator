@@ -115,4 +115,3 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - **Commande** : `/logs {?nb_logs=50}`
 - **Réponses possibles** :
   - `200/OK` : Logs reçus.
-  - `204/NO CONTENT` : Aucun log disponible.
