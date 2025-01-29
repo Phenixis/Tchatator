@@ -272,7 +272,6 @@ int main(int argc, char *argv[])
         perror("Socket creation failed");
         return 1;
     }
-    char *to_log = malloc(100);
     sprintf(to_log, "Socket: %d", sock);
     logs(to_log, "", "", verbose);
 
@@ -365,7 +364,7 @@ int main(int argc, char *argv[])
             }
             else
             {
-                logs("Commande /deconnexion", id_compte_client, client_ip, 1);
+                logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
                 strcpy(id_compte_client, "");
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 break;
