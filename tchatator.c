@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
                 param_file = argv[i + 1];
                 i++; // Skip the next argument as it is the file name
             }
-            else 
+            else
             {
                 printf("Missing argument for option %s\n", argv[i]);
                 return 1;
@@ -247,6 +247,10 @@ int main(int argc, char *argv[])
     }
     struct param params[100];
     read_param_file(params, param_file);
+
+    char *to_log = malloc(200);
+    sprintf(to_log, "Service lancé avec le fichier de paramétrage '%s' et le mode verbose '%d'", param_file, verbose);
+    logs(to_log, "", "", verbose);
 
     int sock;
     struct sockaddr_in addr;
@@ -334,7 +338,7 @@ int main(int argc, char *argv[])
     }
     sprintf(to_log, "Accept: %d", cnx);
     logs(to_log, "", "", verbose);
-    
+
     char *client_ip = inet_ntoa(conn_addr.sin_addr);
     PGconn *conn = get_connection(params, verbose);
     char buffer[2048];
@@ -539,9 +543,91 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
+            else if (strcmp(id_compte_client, "admin") == 0)
+            {
+                char *nb_logs = strtok(trimmed_buffer + 6, " ");
+                if (nb_logs == NULL)
+                {
+                    nb_logs = "50";
+                }
+                
+                char *log_file = get_param(params, "fichier_logs");
+                if (log_file == NULL)
+                {
+                    send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    FILE *file = fopen(log_file, "r");
+                    if (!file)
+                    {
+                        perror("fopen failed");
+                        send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                    }
+                    else
+                    {
+                        fseek(file, 0, SEEK_END);
+                        long file_size = ftell(file);
+                        fseek(file, 0, SEEK_SET);
+
+                        char *file_content = malloc(file_size + 1);
+                        fread(file_content, 1, file_size, file);
+                        file_content[file_size] = '\0';
+
+                        fclose(file);
+
+                        char *line = strtok(file_content, "\n");
+                        int line_count = 0;
+                        while (line)
+                        {
+                            line_count++;
+                            line = strtok(NULL, "\n");
+                        }
+
+                        free(file_content);
+
+                        file = fopen(log_file, "r");
+                        if (!file)
+                        {
+                            perror("fopen failed");
+                            send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            file_content = malloc(file_size + 1);
+                            fread(file_content, 1, file_size, file);
+                            file_content[file_size] = '\0';
+
+                            fclose(file);
+
+                            line = strtok(file_content, "\n");
+                            int start_line = line_count - atoi(nb_logs);
+                            if (start_line < 0)
+                            {
+                                start_line = 0;
+                            }
+
+                            line_count = 0;
+                            while (line)
+                            {
+                                if (line_count >= start_line)
+                                {
+                                    write(cnx, line, strlen(line));
+                                    write(cnx, "\n", 1);
+                                }
+                                line_count++;
+                                line = strtok(NULL, "\n");
+                            }
+
+                            free(file_content);
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        }
+                    }
+                }
+            }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else
