@@ -93,7 +93,7 @@ char *get_param(struct param *params, const char *name)
         }
     }
     printf("Paramètre [%s] introuvable dans le fichier de paramétrage\n", name);
-    return NULL;
+    exit(1);
 }
 
 int logs(char *message, char *clientID, char *clientIP, int verbose)
@@ -153,30 +153,10 @@ void exit_on_error(PGconn *conn)
 PGconn *get_connection(struct param *params, int verbose)
 {
     char *host = get_param(params, "db_host");
-    if (host == NULL)
-    {
-        return NULL;
-    }
     char *port = get_param(params, "db_port");
-    if (port == NULL)
-    {
-        return NULL;
-    }
     char *dbname = get_param(params, "db_name");
-    if (dbname == NULL)
-    {
-        return NULL;
-    }
     char *user = get_param(params, "db_user");
-    if (user == NULL)
-    {
-        return NULL;
-    }
     char *password = get_param(params, "db_password");
-    if (password == NULL)
-    {
-        return NULL;
-    }
     char conninfo[1024];
     sprintf(conninfo, "host=%s port=%s dbname=%s user=%s password=%s", host, port, dbname, user, password);
 
@@ -256,10 +236,6 @@ int main(int argc, char *argv[])
     struct sockaddr_in addr;
     int ret;
     char *portName = get_param(params, "socket_port");
-    if (portName == NULL)
-    {
-        return 1;
-    }
     int port = atoi(portName);
     int size;
     int cnx;
@@ -313,10 +289,6 @@ int main(int argc, char *argv[])
 
     // Mise en écoute de la socket
     char *max_pending_connections = get_param(params, "max_pending_connections");
-    if (max_pending_connections == NULL)
-    {
-        return 1;
-    }
     ret = listen(sock, atoi(max_pending_connections));
     if (ret == -1)
     {
@@ -393,11 +365,7 @@ int main(int argc, char *argv[])
                 else
                 {
                     char *admin_api_key = get_param(params, "admin_api_key");
-                    if (admin_api_key == NULL)
-                    {
-                        return 1;
-                    }
-                    else if (strcmp(api_key, admin_api_key) == 0)
+                    if (strcmp(api_key, admin_api_key) == 0)
                     {
                         strcpy(id_compte_client, "admin");
                         send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
@@ -532,7 +500,8 @@ int main(int argc, char *argv[])
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                read_param_file(params, param_file);
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
@@ -549,15 +518,37 @@ int main(int argc, char *argv[])
                 {
                     nb_logs = "50";
                 }
-                
+
                 char *log_file = get_param(params, "fichier_logs");
-                if (log_file == NULL)
+                FILE *file = fopen(log_file, "r");
+                if (!file)
                 {
+                    perror("fopen failed");
                     send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
                 }
                 else
                 {
-                    FILE *file = fopen(log_file, "r");
+                    fseek(file, 0, SEEK_END);
+                    long file_size = ftell(file);
+                    fseek(file, 0, SEEK_SET);
+
+                    char *file_content = malloc(file_size + 1);
+                    fread(file_content, 1, file_size, file);
+                    file_content[file_size] = '\0';
+
+                    fclose(file);
+
+                    char *line = strtok(file_content, "\n");
+                    int line_count = 0;
+                    while (line)
+                    {
+                        line_count++;
+                        line = strtok(NULL, "\n");
+                    }
+
+                    free(file_content);
+
+                    file = fopen(log_file, "r");
                     if (!file)
                     {
                         perror("fopen failed");
@@ -565,62 +556,33 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        fseek(file, 0, SEEK_END);
-                        long file_size = ftell(file);
-                        fseek(file, 0, SEEK_SET);
-
-                        char *file_content = malloc(file_size + 1);
+                        file_content = malloc(file_size + 1);
                         fread(file_content, 1, file_size, file);
                         file_content[file_size] = '\0';
 
                         fclose(file);
 
-                        char *line = strtok(file_content, "\n");
-                        int line_count = 0;
+                        line = strtok(file_content, "\n");
+                        int start_line = line_count - atoi(nb_logs);
+                        if (start_line < 0)
+                        {
+                            start_line = 0;
+                        }
+
+                        line_count = 0;
                         while (line)
                         {
+                            if (line_count >= start_line)
+                            {
+                                write(cnx, line, strlen(line));
+                                write(cnx, "\n", 1);
+                            }
                             line_count++;
                             line = strtok(NULL, "\n");
                         }
 
                         free(file_content);
-
-                        file = fopen(log_file, "r");
-                        if (!file)
-                        {
-                            perror("fopen failed");
-                            send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
-                        }
-                        else
-                        {
-                            file_content = malloc(file_size + 1);
-                            fread(file_content, 1, file_size, file);
-                            file_content[file_size] = '\0';
-
-                            fclose(file);
-
-                            line = strtok(file_content, "\n");
-                            int start_line = line_count - atoi(nb_logs);
-                            if (start_line < 0)
-                            {
-                                start_line = 0;
-                            }
-
-                            line_count = 0;
-                            while (line)
-                            {
-                                if (line_count >= start_line)
-                                {
-                                    write(cnx, line, strlen(line));
-                                    write(cnx, "\n", 1);
-                                }
-                                line_count++;
-                                line = strtok(NULL, "\n");
-                            }
-
-                            free(file_content);
-                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                        }
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     }
                 }
             }
