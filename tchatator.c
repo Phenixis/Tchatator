@@ -103,15 +103,15 @@ int logs(char *message, char *clientID, char *clientIP, int verbose)
     struct tm *local = localtime(&now);
     char time_str[100];
     strftime(time_str, sizeof(time_str), "%d/%m/%Y - %H:%M:%S", local);
-    if (verbose == 1)
-    {
-        printf("[date+heure:%s] [id_client:%s] [ip_client:%s] : %s\n", time_str, clientID, clientIP, message);
-    }
     FILE *file = fopen("tchatator.log", "a");
     if (!file)
     {
-        perror("fopen failed");
+        perror("fopen failed on tchatator.log");
         return 1;
+    }
+    if (verbose == 1)
+    {
+        printf("[date+heure:%s] [id_client:%s] [ip_client:%s] : %s\n", time_str, clientID, clientIP, message);
     }
     fprintf(file, "[date+heure:%s] [id_client:%s] [ip_client:%s] : %s\n", time_str, clientID, clientIP, message);
     fclose(file);
@@ -128,12 +128,12 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
 
         // On log le message avant d'y ajouter le caractère de fin de ligne
         char *to_log = malloc(strlen(message) + 100);
-        sprintf(to_log, "Réponse envoyée : %s", message, verbose);
+        sprintf(to_log, "Réponse envoyée : %s", message);
         logs(to_log, clientID, clientIP, verbose);
 
         strcat(message, "\n");
-
         write(cnx, message, strlen(message));
+
         return 1;
     }
     else
@@ -177,7 +177,7 @@ PGconn *get_connection(struct param *params, int verbose)
 PGresult *execute(PGconn *conn, char *query)
 {
     PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
     {
         fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
         PQclear(res);
@@ -333,25 +333,30 @@ int main(int argc, char *argv[])
     char *client_ip = inet_ntoa(conn_addr.sin_addr);
     PGconn *conn = get_connection(params, verbose);
     char buffer[2048];
-    char id_compte_client[1024];
+    char id_compte_client[50];
+
+    // Attente du message client
     int len = read(cnx, buffer, sizeof(buffer) - 1);
     buffer[len] = '\0';
 
     while (len > 0)
     {
         char *trimmed_buffer = trim_newline(buffer);
-
-        // Log the message
+        // Afficher le message reçu
         char *to_log = malloc(strlen(trimmed_buffer) + 100);
         sprintf(to_log, "Message reçu : %s", trimmed_buffer);
         logs(to_log, id_compte_client, client_ip, verbose);
 
+        // ###########################
+        // # CONNEXION & DECONNEXION #
+        // ###########################
         if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
         {
             if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
             {
                 logs("Commande d'aide /deconnexion", id_compte_client, client_ip, verbose);
-                write(cnx, "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n", 45);
+                char *help_message = "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n";
+                write(cnx, help_message, strlen(help_message));
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
@@ -377,14 +382,16 @@ int main(int argc, char *argv[])
 
                 PGresult *res = execute(conn, query);
 
+                // Se connecter en tant que membre
                 if (PQntuples(res) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
                     char update_query[256];
-                    snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id = '%s';", id_compte_client);
+                    snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
                     execute(conn, update_query);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
+                // Se connecter en tant qu'admin
                 else
                 {
                     char *admin_api_key = get_param(params, "admin_api_key");
@@ -401,11 +408,16 @@ int main(int argc, char *argv[])
 
                 PQclear(res);
             }
+            // Aucune clé API correspondante trouvée
             else
             {
                 send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
             }
         }
+
+        // ##############
+        // # MESSAGERIE #
+        // ##############
         else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
         {
             if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
@@ -478,6 +490,10 @@ int main(int argc, char *argv[])
                 send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
             }
         }
+
+        // ################
+        // # BANNISSEMENT #
+        // ################
         else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
         {
             if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
@@ -511,11 +527,11 @@ int main(int argc, char *argv[])
                     send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
                     continue;
                 }
-                
+
                 char query[256];
                 snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
                 execute(conn, query);
-                
+
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
@@ -556,6 +572,10 @@ int main(int argc, char *argv[])
                 send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
+
+        // ###############
+        // # PARAMETRAGE #
+        // ###############
         else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
