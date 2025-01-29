@@ -4,6 +4,8 @@ Ci-dessous, tu trouveras le protocole de communication à respecter pour que le 
 
 Le chat sera écrit en langage C et doit mettre en oeuvre une programmation de sockets.
 
+Tout doit être écrit en français.
+
 Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - Port d'écoute
 - Nombre maxi de messages
@@ -107,10 +109,8 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - **Commande** : `/sync`
 - **Réponses possibles** :
   - `200/OK` : Paramétrage relu.
-  - `404/NOT FOUND` : Fichier de paramétrage introuvable.
 
 ## Logs
 - **Commande** : `/logs {?nb_logs=50}`
 - **Réponses possibles** :
   - `200/OK` : Logs reçus.
-  - `204/NO CONTENT` : Aucun log disponible.

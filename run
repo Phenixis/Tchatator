@@ -7,7 +7,7 @@ fi
 
 gcc -o "${1%.c}.out" "$1" -I/usr/include/postgresql -lpq
 if [ $? -eq 0 ]; then
-    ./"${1%.c}.out"
+    ./"${1%.c}.out" "${@:2}"
     rm -f "${1%.c}.out"
 else
     echo "Compilation failed."
