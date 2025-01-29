@@ -20,9 +20,10 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 
 ## Préambule
 À toute commande, le SERVICE peut renvoyer les codes suivants :
-- `429/TOO MANY REQUESTS` : Limite de requêtes atteinte.
-- `401/UNAUTHORIZED` : Connexion non identifiée ou clé d'API invalide.
+- `401/UNAUTHORIZED` : La connexion n'est pas identifiée ou le CLIENT n'a pas les droits pour accéder à cette commande (commande admin par exemple)
+- `403/FORBIDDEN` : Le CLIENT est banni.
 - `404/NOT FOUND` : La commande n'est pas reconnue.
+- `429/TOO MANY REQUESTS` : Limite de requêtes atteinte.
 - `500/SERVER ERROR` : Le serveur a rencontré une erreur imprévue.
 - `501/NOT IMPLEMENTED` : La commande est reconnue mais n'est pas encore fonctionnelle.
 
@@ -45,6 +46,7 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - **Réponses possibles** :
   - `200/OK` : Message envoyé.
   - `413/PAYLOAD TOO LARGE` : Message trop long.
+  - `423/LOCKED` : Le destinataire vous a bloqué pour une durée maximale de 24h.
   - `404/NOT FOUND` : Destinataire inexistant.
 
 ## Réception des messages non lus
@@ -96,8 +98,8 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - **Commande** : `/ban {id_client}`
 - **Réponses possibles** :
   - `200/OK` : CLIENT banni.
-  - `409/CONFLICT` : CLIENT déjà banni.
   - `404/NOT FOUND` : `id_client` inexistant.
+  - `409/CONFLICT` : CLIENT déjà banni.
 
 ### Levage d'un bannissement
 - **Commande** : `/deban {id_client}`

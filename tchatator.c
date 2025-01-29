@@ -186,12 +186,31 @@ PGresult *execute(PGconn *conn, char *query)
     return res;
 }
 
+int client_existe(PGconn *conn, char *id_client)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE id_compte = '%s';", id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res) > 0;
+    PQclear(res);
+    return result;
+}
+
+int client_est_banni(PGconn *conn, char *id_client)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._bannissement WHERE id_banni = '%s' AND date_debannissement IS NULL;", id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res) > 0;
+    PQclear(res);
+    return result;
+}
+
 int main(int argc, char *argv[])
 {
-    char *param_file = ".tchatator"; // Default parameter file
+    char *param_file = ".tchatator"; // Fichier de paramètres par défaut
     int verbose = 0;
 
-    // Parse command line arguments
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fileparam") == 0)
@@ -237,6 +256,7 @@ int main(int argc, char *argv[])
     int ret;
     char *portName = get_param(params, "socket_port");
     int port = atoi(portName);
+    int port_max = port + 10;
     int size;
     int cnx;
     struct sockaddr_in conn_addr;
@@ -245,7 +265,7 @@ int main(int argc, char *argv[])
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1)
     {
-        perror("Socket creation failed");
+        perror("Création du socket échouée : ");
         return 1;
     }
     sprintf(to_log, "Socket: %d", sock);
@@ -264,11 +284,11 @@ int main(int argc, char *argv[])
             if (errno == EADDRINUSE)
             {
 
-                sprintf(to_log, "Port %d is already in use, trying port %d", port, port + 1);
+                sprintf(to_log, "Le port %d est déjà utilisé, essaie pour le port %d", port, port + 1);
                 logs(to_log, "", "", 1);
-                if (port > 8089)
+                if (port > port_max)
                 {
-                    perror("No available ports");
+                    perror("Aucun port disponible");
                     close(sock);
                     return 1;
                 }
@@ -277,14 +297,14 @@ int main(int argc, char *argv[])
             }
             else
             {
-                perror("Bind failed");
+                perror("Erreur lors du bind");
                 close(sock);
                 return 1;
             }
         }
         break;
     }
-    sprintf(to_log, "Bind on port %d", port);
+    sprintf(to_log, "Socket bind sur le port %d", port);
     logs(to_log, "", "", 1);
 
     // Mise en écoute de la socket
@@ -303,7 +323,7 @@ int main(int argc, char *argv[])
     cnx = accept(sock, (struct sockaddr *)&conn_addr, (socklen_t *)&size);
     if (cnx == -1)
     {
-        perror("Accept failed");
+        perror("Erreur lors de l'acceptation de la connexion");
         close(sock);
         return 1;
     }
@@ -360,6 +380,9 @@ int main(int argc, char *argv[])
                 if (PQntuples(res) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+                    char update_query[256];
+                    snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id = '%s';", id_compte_client);
+                    execute(conn, update_query);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
@@ -474,9 +497,30 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
+            else if (strcmp(id_compte_client, "admin") == 0)
+            {
+                char *id_client = trimmed_buffer + 5;
+                if (client_existe(conn, id_client) == 0)
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                if (client_est_banni(conn, id_client) == 1)
+                {
+                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+                
+                char query[256];
+                snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
+                execute(conn, query);
+                
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/deban ", 7) == 0)
@@ -486,9 +530,30 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
+            else if (strcmp(id_compte_client, "admin") == 0)
+            {
+                char *id_client = trimmed_buffer + 7;
+                if (client_existe(conn, id_client) == 0)
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                if (client_est_banni(conn, id_client) == 0)
+                {
+                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                char query[256];
+                snprintf(query, sizeof(query), "UPDATE sae_db._bannissement SET date_debannissement = NOW() WHERE id_banni = '%s' AND date_debannissement IS NULL;", id_client);
+                execute(conn, query);
+
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
