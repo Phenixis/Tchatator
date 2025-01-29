@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <libpq-fe.h>
 #include <time.h>
+#include <fcntl.h>
 
 struct param
 {
@@ -30,6 +31,11 @@ char *trim_newline(const char *str)
     while (len > 0 && (trimmed_str[len - 1] == '\n' || trimmed_str[len - 1] == '\r' || isspace(trimmed_str[len - 1])))
     {
         trimmed_str[len - 1] = '\0';
+        len--;
+    }
+    while (len > 0 && (trimmed_str[0] == '\n' || trimmed_str[0] == '\r' || isspace(trimmed_str[0])))
+    {
+        trimmed_str++;
         len--;
     }
     return trimmed_str;
@@ -210,6 +216,7 @@ int main(int argc, char *argv[])
 {
     char *param_file = ".tchatator"; // Fichier de paramètres par défaut
     int verbose = 0;
+    int mode_dev = 0;
 
     for (int i = 1; i < argc; i++)
     {
@@ -229,6 +236,10 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0)
         {
             verbose = 1;
+        }
+        else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--dev") == 0)
+        {
+            mode_dev = 1;
         }
         else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
         {
@@ -258,83 +269,102 @@ int main(int argc, char *argv[])
     int port = atoi(portName);
     int port_max = port + 10;
     int size;
-    int cnx;
+    int cnx_lecture;
+    int cnx_ecriture;
     struct sockaddr_in conn_addr;
 
-    // Création de la socket
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1)
+    if (mode_dev == 0)
     {
-        perror("Création du socket échouée : ");
-        return 1;
-    }
-    sprintf(to_log, "Socket: %d", sock);
-    logs(to_log, "", "", verbose);
-
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    addr.sin_family = AF_INET;
-
-    // Cette boucle permet de trouver un port libre
-    while (1)
-    {
-        addr.sin_port = htons(port);
-        ret = bind(sock, (struct sockaddr *)&addr, sizeof(addr));
-        if (ret == -1)
+        // Création de la socket
+        sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock == -1)
         {
-            if (errno == EADDRINUSE)
-            {
+            perror("Création du socket échouée : ");
+            return 1;
+        }
+        sprintf(to_log, "Socket: %d", sock);
+        logs(to_log, "", "", verbose);
 
-                sprintf(to_log, "Le port %d est déjà utilisé, essaie pour le port %d", port, port + 1);
-                logs(to_log, "", "", 1);
-                if (port > port_max)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        addr.sin_family = AF_INET;
+
+        // Cette boucle permet de trouver un port libre
+        while (1)
+        {
+            addr.sin_port = htons(port);
+            ret = bind(sock, (struct sockaddr *)&addr, sizeof(addr));
+            if (ret == -1)
+            {
+                if (errno == EADDRINUSE)
                 {
-                    perror("Aucun port disponible");
+
+                    sprintf(to_log, "Le port %d est déjà utilisé, essaie pour le port %d", port, port + 1);
+                    logs(to_log, "", "", 1);
+                    if (port > port_max)
+                    {
+                        perror("Aucun port disponible");
+                        close(sock);
+                        return 1;
+                    }
+                    port++;
+                    continue;
+                }
+                else
+                {
+                    perror("Erreur lors du bind");
                     close(sock);
                     return 1;
                 }
-                port++;
-                continue;
             }
-            else
-            {
-                perror("Erreur lors du bind");
-                close(sock);
-                return 1;
-            }
+            break;
         }
-        break;
-    }
-    sprintf(to_log, "Socket bind sur le port %d", port);
-    logs(to_log, "", "", 1);
+        sprintf(to_log, "Socket bind sur le port %d", port);
+        logs(to_log, "", "", 1);
 
-    // Mise en écoute de la socket
-    char *max_pending_connections = get_param(params, "max_pending_connections");
-    ret = listen(sock, atoi(max_pending_connections));
-    if (ret == -1)
+        // Mise en écoute de la socket
+        char *max_pending_connections = get_param(params, "max_pending_connections");
+        ret = listen(sock, atoi(max_pending_connections));
+        if (ret == -1)
+        {
+            perror("Listen failed");
+            close(sock);
+            return 1;
+        }
+        sprintf(to_log, "Listen: %d", ret);
+        logs(to_log, "", "", verbose);
+
+        size = sizeof(conn_addr);
+        cnx_lecture = accept(sock, (struct sockaddr *)&conn_addr, (socklen_t *)&size);
+        if (cnx_lecture == -1)
+        {
+            perror("Erreur lors de l'acceptation de la connexion");
+            close(sock);
+            return 1;
+        }
+        cnx_ecriture = cnx_lecture;
+        sprintf(to_log, "Accept: %d", cnx_lecture);
+        logs(to_log, "", "", verbose);
+    }
+    else
     {
-        perror("Listen failed");
-        close(sock);
-        return 1;
+        cnx_lecture = open("to_tchatator", O_RDONLY);
+        if (cnx_lecture == -1)
+        {
+            perror("Erreur lors de l'ouverture du pipe en lecture");
+            return 1;
+        }
+        cnx_ecriture = open("from_tchatator", O_WRONLY);
+        if (cnx_ecriture == -1)
+        {
+            perror("Erreur lors de l'ouverture du pipe en écriture");
+            return 1;
+        }
     }
-    sprintf(to_log, "Listen: %d", ret);
-    logs(to_log, "", "", verbose);
-
-    size = sizeof(conn_addr);
-    cnx = accept(sock, (struct sockaddr *)&conn_addr, (socklen_t *)&size);
-    if (cnx == -1)
-    {
-        perror("Erreur lors de l'acceptation de la connexion");
-        close(sock);
-        return 1;
-    }
-    sprintf(to_log, "Accept: %d", cnx);
-    logs(to_log, "", "", verbose);
-
     char *client_ip = inet_ntoa(conn_addr.sin_addr);
     PGconn *conn = get_connection(params, verbose);
     char buffer[2048];
     char id_compte_client[1024];
-    int len = read(cnx, buffer, sizeof(buffer) - 1);
+    int len = read(cnx_lecture, buffer, sizeof(buffer) - 1);
     buffer[len] = '\0';
 
     while (len > 0)
@@ -351,14 +381,14 @@ int main(int argc, char *argv[])
             if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
             {
                 logs("Commande d'aide /deconnexion", id_compte_client, client_ip, verbose);
-                write(cnx, "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n", 45);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n", 45);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
                 logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
                 strcpy(id_compte_client, "");
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
                 break;
             }
         }
@@ -366,8 +396,8 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
             {
-                write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
             {
@@ -383,7 +413,7 @@ int main(int argc, char *argv[])
                     char update_query[256];
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id = '%s';", id_compte_client);
                     execute(conn, update_query);
-                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                    send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
                 {
@@ -391,157 +421,156 @@ int main(int argc, char *argv[])
                     if (strcmp(api_key, admin_api_key) == 0)
                     {
                         strcpy(id_compte_client, "admin");
-                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
                     }
                     else
                     {
-                        send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                        send_answer(cnx_ecriture, params, "401", id_compte_client, client_ip, verbose);
                     }
                 }
-
                 PQclear(res);
             }
             else
             {
-                send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "406", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
         {
             if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
             {
-                write(cnx, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
         {
             if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
             {
-                write(cnx, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
         {
             if (strcmp(trimmed_buffer, "/conversation -h") == 0 || strcmp(trimmed_buffer, "/conversation --help") == 0)
             {
-                write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
         {
             if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
             {
-                write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/modifie ", 9) == 0)
         {
             if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
             {
-                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/supprime ", 10) == 0)
         {
             if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
             {
-                write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
         {
             if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
             {
-                write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "501", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/ban ", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/ban -h") == 0 || strcmp(trimmed_buffer, "/ban --help") == 0)
             {
-                write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else if (strcmp(id_compte_client, "admin") == 0)
             {
                 char *id_client = trimmed_buffer + 5;
                 if (client_existe(conn, id_client) == 0)
                 {
-                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    send_answer(cnx_ecriture, params, "404", id_compte_client, client_ip, verbose);
                     continue;
                 }
 
                 if (client_est_banni(conn, id_client) == 1)
                 {
-                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                    send_answer(cnx_ecriture, params, "409", id_compte_client, client_ip, verbose);
                     continue;
                 }
-                
+
                 char query[256];
                 snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
                 execute(conn, query);
-                
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/deban ", 7) == 0)
         {
             if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
             {
-                write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else if (strcmp(id_compte_client, "admin") == 0)
             {
                 char *id_client = trimmed_buffer + 7;
                 if (client_existe(conn, id_client) == 0)
                 {
-                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    send_answer(cnx_ecriture, params, "404", id_compte_client, client_ip, verbose);
                     continue;
                 }
 
                 if (client_est_banni(conn, id_client) == 0)
                 {
-                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                    send_answer(cnx_ecriture, params, "409", id_compte_client, client_ip, verbose);
                     continue;
                 }
 
@@ -549,32 +578,32 @@ int main(int argc, char *argv[])
                 snprintf(query, sizeof(query), "UPDATE sae_db._bannissement SET date_debannissement = NOW() WHERE id_banni = '%s' AND date_debannissement IS NULL;", id_client);
                 execute(conn, query);
 
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
             {
-                write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else
             {
                 read_param_file(params, param_file);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/logs -h") == 0 || strcmp(trimmed_buffer, "/logs --help") == 0)
             {
-                write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx_ecriture, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
+                send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
             else if (strcmp(id_compte_client, "admin") == 0)
             {
@@ -589,7 +618,7 @@ int main(int argc, char *argv[])
                 if (!file)
                 {
                     perror("fopen failed");
-                    send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                    send_answer(cnx_ecriture, params, "500", id_compte_client, client_ip, verbose);
                 }
                 else
                 {
@@ -617,7 +646,7 @@ int main(int argc, char *argv[])
                     if (!file)
                     {
                         perror("fopen failed");
-                        send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                        send_answer(cnx_ecriture, params, "500", id_compte_client, client_ip, verbose);
                     }
                     else
                     {
@@ -639,34 +668,38 @@ int main(int argc, char *argv[])
                         {
                             if (line_count >= start_line)
                             {
-                                write(cnx, line, strlen(line));
-                                write(cnx, "\n", 1);
+                                write(cnx_ecriture, line, strlen(line));
+                                write(cnx_ecriture, "\n", 1);
                             }
                             line_count++;
                             line = strtok(NULL, "\n");
                         }
 
                         free(file_content);
-                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
                     }
                 }
             }
             else
             {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else
         {
-            send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+            send_answer(cnx_ecriture, params, "404", id_compte_client, client_ip, verbose);
         }
 
         free(trimmed_buffer);
-        len = read(cnx, buffer, sizeof(buffer) - 1);
+        len = read(cnx_lecture, buffer, sizeof(buffer) - 1);
         buffer[len] = '\0';
     }
 
-    close(cnx);
+    close(cnx_lecture);
+    if (mode_dev == 1)
+    {
+        close(cnx_ecriture);
+    }
     close(sock);
 
     return 0;
