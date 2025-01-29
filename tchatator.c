@@ -62,7 +62,7 @@ void read_param_file(struct param *params)
 
         if (name && value)
         {
-            
+
             params[index].name = trim_newline(name);
             params[index].value = trim_newline(value);
             index++;
@@ -82,11 +82,16 @@ char *get_param(struct param *params, const char *name)
 {
     for (int i = 0; i < 100; i++)
     {
-        if (params[i].name && strcmp(params[i].name, name) == 0)
+        if (params[i].name == NULL || params[i].value == NULL)
+        {
+            break;
+        }
+        else if (strcmp(params[i].name, name) == 0)
         {
             return params[i].value;
         }
     }
+    printf("Paramètre [%s] introuvable dans le .tchatator\n", name);
     return NULL;
 }
 
@@ -118,10 +123,30 @@ void exit_on_error(PGconn *conn)
 PGconn *get_connection(struct param *params)
 {
     char *host = get_param(params, "db_host");
+    if (host == NULL)
+    {
+        return NULL;
+    }
     char *port = get_param(params, "db_port");
+    if (port == NULL)
+    {
+        return NULL;
+    }
     char *dbname = get_param(params, "db_name");
+    if (dbname == NULL)
+    {
+        return NULL;
+    }
     char *user = get_param(params, "db_user");
+    if (user == NULL)
+    {
+        return NULL;
+    }
     char *password = get_param(params, "db_password");
+    if (password == NULL)
+    {
+        return NULL;
+    }
     char conninfo[1024];
     sprintf(conninfo, "host=%s port=%s dbname=%s user=%s password=%s", host, port, dbname, user, password);
 
@@ -134,7 +159,7 @@ PGconn *get_connection(struct param *params)
         exit_on_error(conn);
     }
 
-    printf("Connected to the database successfully!\n");
+    printf("Successfully connected to the database!\n");
 
     return conn;
 }
@@ -159,7 +184,12 @@ int main()
     int sock;
     struct sockaddr_in addr;
     int ret;
-    int port = atoi(get_param(params, "socket_port"));
+    char *portName = get_param(params, "socket_port");
+    if (portName == NULL)
+    {
+        return 1;
+    }
+    int port = atoi(portName);
     int size;
     int cnx;
     struct sockaddr_in conn_addr;
@@ -207,7 +237,12 @@ int main()
     printf("Bind: %d on port %d\n", ret, port);
 
     // Mise en écoute de la socket
-    ret = listen(sock, atoi(get_param(params, "max_pending_connections")));
+    char *max_pending_connections = get_param(params, "max_pending_connections");
+    if (max_pending_connections == NULL)
+    {
+        return 1;
+    }
+    ret = listen(sock, atoi(max_pending_connections));
     if (ret == -1)
     {
         perror("Listen failed");
@@ -252,6 +287,7 @@ int main()
         }
         else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
         {
+            printf("In /connexion\n");
             if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
             {
                 write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
@@ -259,20 +295,38 @@ int main()
             }
             else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
             {
+                printf("In /connexion with api key\n");
                 char *api_key = trimmed_buffer + 11;
                 char query[256];
                 snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
 
                 PGresult *res = execute(conn, query);
 
+                printf("After postgres execute\n");
                 if (PQntuples(res) > 0)
                 {
+                    printf("In user cas\n");
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
                     send_answer(cnx, params, "200");
                 }
                 else
                 {
-                    send_answer(cnx, params, "401");
+                    char *admin_api_key = get_param(params, "admin_api_key");
+                    if (admin_api_key == NULL)
+                    {
+                        return 1;
+                    }
+                    else if (strcmp(api_key, admin_api_key) == 0)
+                    {
+                        printf("In admin cas\n");
+                        strcpy(id_compte_client, "admin");
+                        send_answer(cnx, params, "200");
+                    }
+                    else
+                    {
+                        printf("In unknown cas\n");
+                        send_answer(cnx, params, "401");
+                    }
                 }
 
                 PQclear(res);
