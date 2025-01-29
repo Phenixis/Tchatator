@@ -10,6 +10,7 @@ db_port= # Port de connexion à la bdd
 db_name= # Nom de la bdd
 db_user= # Nom d'utilisateur à la bdd
 db_password= # Mot de passe de l'utilisateur
+fichier_logs=tchatator.log # Fichier de logs
 200=OK
 204=NO CONTENT
 401=UNAUTHORIZED
