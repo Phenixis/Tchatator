@@ -33,10 +33,10 @@ Pour les requêtes à la base de données, lors de la connexion, l'id du compte 
 - [ ] Blocage d'un client -> 200/OK
 - [ ] Blocage d'un client -> 409/CONFLICT
 - [ ] Blocage d'un client -> 404/NOT FOUND
-- [ ] Bannissement d'un client -> 200/OK
-- [ ] Bannissement d'un client -> 409/CONFLICT
-- [ ] Bannissement d'un client -> 404/NOT FOUND
-- [ ] Levage d'un bannissement -> 200/OK
-- [ ] Levage d'un bannissement -> 404/NOT FOUND
+- [x] Bannissement d'un client -> 200/OK
+- [x] Bannissement d'un client -> 409/CONFLICT
+- [x] Bannissement d'un client -> 404/NOT FOUND
+- [x] Levage d'un bannissement -> 200/OK
+- [x] Levage d'un bannissement -> 404/NOT FOUND
 - [x] Synchronisation des paramètres -> 200/OK
 - [x] Récupération des logs -> 200/OK
