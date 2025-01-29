@@ -16,13 +16,19 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - Le nombre de connexion en file d'attente
 - Les codes de réponses
 
+Voici un exemple de clé API pour un CLIENT professionnel : `tchatator_81cdc23c473d3b39ffd36f226`
+Voici un exemple de clé API pour un CLIENT membre : `tchatator_21d625bb0d35d205fc4bc9408`
+Voici la clé API de l'admin : `tchatator_FNOC_TO_THE_TOP`
+Voici un id_client membre : 21
+Voici un id_client professionnel : 5
+
 # Pactocole
 
 ## Préambule
 À toute commande, le SERVICE peut renvoyer les codes suivants :
 - `401/UNAUTHORIZED` : La connexion n'est pas identifiée ou le CLIENT n'a pas les droits pour accéder à cette commande (commande admin par exemple)
 - `403/FORBIDDEN` : Le CLIENT est banni.
-- `404/NOT FOUND` : La commande n'est pas reconnue.
+- `406/NOT ACCTEPTABLE` : La commande n'est pas reconnue.
 - `429/TOO MANY REQUESTS` : Limite de requêtes atteinte.
 - `500/SERVER ERROR` : Le serveur a rencontré une erreur imprévue.
 - `501/NOT IMPLEMENTED` : La commande est reconnue mais n'est pas encore fonctionnelle.
