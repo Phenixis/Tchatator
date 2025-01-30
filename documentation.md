@@ -20,10 +20,10 @@ Il est ici utilisé dans le cadre du site TripEnArmor et travaille avec le modè
     }
 </style>
 
-Il y a 3 rôles dans la communication avec Tchatator
-- Le <span class="role client">client</span>, pouvant envoyer des messages au professionnel
-- Le <span class="role pro">professionnel</span>, pouvant communiquer avec ses potentiels client et les bloquer
-- L'<span class="role admin">administrateur</span>, pouvant tout faire
+Il y a 3 rôles dans la communication avec Tchatator :
+- Le <span class="role client">client</span> *(connecté ou non)*, pouvant envoyer des messages au professionnel
+- Le <span class="role pro">professionnel</span>, pouvant communiquer avec ses potentiels clients et les bloquer / bannir
+- L'<span class="role admin">administrateur</span>, pouvant bloquer, banir, ou lever n'importe quelle de ces contraintes
 
 ## Utilisation (en local)
 1. Télécharger le repo git ```git clone https://github.com/Phenixis/Tchatator```
@@ -38,37 +38,38 @@ Il y a 3 rôles dans la communication avec Tchatator
 - **-h** *(ou --help)* pour afficher de l'aide
 
 ## Se connecter avec le service Tchatator
-Pour communiquer avec le service, utiliser n'importe quel outil de connexion en socket C. Voci une liste non exhaustive.
+Pour communiquer avec le service, vous pouvez exécuter notre fichier-logiciel avec la commande ```./run client.c <port>``` ou utiliser n'importe quel outil de connexion en socket C. En voici quelques exemples :
 - **Telnet**
 - **Netcat**
 - **Socat**
 
 ## Liste des requêtes
-Une fois connecté au service, vous pouvez profiter d'une multitude de requêtes dont vous obtiendez les détails avec la syntaxe ```/<commande> -h```. Certaines commandes sont spécifiques à chaque rôle
+Si vous n'utilisez pas directement ```client.c```, vous pouvez profiter d'une multitude de requêtes dont vous obtiendrez les détails en tapant ```/<requete> -h```. Certaines commandes sont spécifiques à certains rôles.
 
 #### Identification
-| Commande       | Pour          |
-|----------------|---------------|
-| /connexion     | Tous          |
-| /deconnexion   | Tous |
+| Commande       | Commentaire                               | Qui ?          |
+|----------------|-------------------------------------------|---------------|
+| /connexion {API_KEY}     | Permet de se connecter à son compte       | Tous          |
+| /deconnexion   | Permet de se déconnecter et de quitter le service | Tous          |
 
 #### Messagerie
-| Commande                 | Pour          |
-|--------------------------|---------------|
-| /message {id_client} {message} | Tous        |
-| /liste                   | <span class="role client">Client</span>, <span class="role pro">Pro</span>        |
-| /conversation {id_client} {?page=0} | <span class="role pro">Pro</span>        |
-| /info {id_message} {?page=0}  | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
+| Commande                          | Commentaire                               | Qui ?          |
+|-----------------------------------|-------------------------------------------|---------------|
+| /message {id_compte} {message}    | Envoie un message au compte renseigné | Tous          |
+| /liste                             | Affiche la liste de vos messages non llus | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
+| /conversation {id_client} {?page=0} | Affiche l'historique des messages avec le client spécifié | <span class="role pro">Pro</span> |
+| /info {id_message}       | Affiche les informations du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
+| /modifie {id_message} {nouveau_message}       | Remplace le contenu du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 
 #### Bannissement
-| Commande     | Pour          |
-|--------------|---------------|
-| /bloque {id_client} | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
-| /ban {id_client}    | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
-| /deban {id_client}  | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
+| Commande     | Commentaire                                 | Qui ?          |
+|--------------|---------------------------------------------|---------------|
+| /bloque {id_client} | Bloque un client pendant 24h                       | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
+| /ban {id_client}    | Bannit un client définitivement                          | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
+| /deban {id_client}  | Lève le bannissement d'un client                         | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
 
 #### Paramétrage
-| Commande | Pour          |
-|----------|---------------|
-| /sync    | <span class="role admin">Admin</span> |
-| /logs    | <span class="role admin">Admin</span> |
+| Commande | Commentaire                                | Qui ?          |
+|----------|--------------------------------------------|---------------|
+| /sync    | Recharge le fichier de synchronisation | <span class="role admin">Admin</span> |
+| /logs    | Affiche les logs dans le fichier logs               | <span class="role admin">Admin</span> |

@@ -118,29 +118,60 @@ int logs(char *message, char *clientID, char *clientIP, int verbose)
     return 0;
 }
 
-char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose)
-{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+// Assume get_param() and logs() are already defined elsewhere.
+
+char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose) {
     char *value = get_param(params, code);
-    char message[1024] = "";
-    if (value)
-    {
-        strcat(strcat(strcat(message, code), "/"), value);
+    
+    if (value) {
+        // Donner la bonne longueur à message
+        int message_length = strlen(code) + strlen(value) + 2; // 1 pour le '/' et 1 pour '\0'
+        char *message = malloc(message_length);
+        
+        if (!message) {
+            perror("Failed to allocate memory for message");
+            return 0;
+        }
 
-        // On log le message avant d'y ajouter le caractère de fin de ligne
+        // Construire dynamiquement le message
+        snprintf(message, message_length, "%s/%s", code, value);
+
+        // Log le message
         char *to_log = malloc(strlen(message) + 100);
-        sprintf(to_log, "Réponse envoyée : %s", message);
-        logs(to_log, clientID, clientIP, verbose);
+        if (to_log) {
+            snprintf(to_log, strlen(message) + 100, "Réponse envoyée : %s", message);
+            logs(to_log, clientID, clientIP, verbose);
+            free(to_log);
+        } else {
+            perror("Failed to allocate memory for logging");
+            free(message);
+            return 0;
+        }
 
-        strcat(message, "\n");
-        write(cnx, message, strlen(message));
+        // Add the newline character to the message
+        char *message_with_newline = malloc(strlen(message) + 2); // +1 for newline, +1 for null terminator
+        if (message_with_newline) {
+            snprintf(message_with_newline, strlen(message) + 2, "%s\n", message);
+            write(cnx, message_with_newline, strlen(message_with_newline));
+            free(message_with_newline);
+        } else {
+            perror("Failed to allocate memory for message with newline");
+            free(message);
+            return 0;
+        }
+
+        free(message);
 
         return 1;
-    }
-    else
-    {
+    } else {
+        //Aucune valeur trouvé pour le code donné
         return send_answer(cnx, params, "500", clientID, clientIP, verbose);
     }
-    return 0;
 }
 
 void exit_on_error(PGconn *conn)
@@ -382,7 +413,7 @@ int main(int argc, char *argv[])
 
                 PGresult *res = execute(conn, query);
 
-                // Se connecter en tant que membre
+                // Se connecter en tant que membre ou pro
                 if (PQntuples(res) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
@@ -422,7 +453,8 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
             {
-                write(cnx, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
+                char *help_message = "Usage: /message {id_compte} {message}\nEnvoie un message au compte spécifié.\n";
+                write(cnx, help_message, strlen(help_message));
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
@@ -474,7 +506,7 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
             {
-                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
+                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié.\n", 79);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
