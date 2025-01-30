@@ -594,14 +594,26 @@ int main(int argc, char *argv[])
             }
         }
 
-        // ################
-        // # BANNISSEMENT #
-        // ################
+        // ##########################
+        // # BLOCAGE & BANNISSEMENT #
+        // ##########################
         else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
         {
             if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
             {
                 write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
+            else
+            {
+                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/debloque ", 10) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/debloque -h") == 0 || strcmp(trimmed_buffer, "/debloque --help") == 0)
+            {
+                write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié.\n", 57);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else

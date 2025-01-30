@@ -19,14 +19,16 @@ void afficher_menu(char *role) {
         printf("4.  Messages non lus\n");
         printf("5.  Informations concernant un de mes messages\n");
         printf("6.  Modifier un de mes messages\n");
+        printf("7.  Supprimer un de mes messages\n");
     }
 
     // Si pro
     if (strcmp(role, "pro") == 0) {
-        printf("7.  Historique des messages avec un client\n");
-        printf("8.  Bloquer un client 24h\n");
-        printf("9.  Bannir un client définitivement\n");
-        printf("10. Lever le ban d'un client\n");
+        printf("8.  Historique des messages avec un client\n");
+        printf("9.  Bloquer un client 24h\n");
+        printf("10  Lever le blocage d'un client 24h\n");
+        printf("11. Bannir un client définitivement\n");
+        printf("12. Lever le ban d'un client\n");
     }
 
     printf("Choisissez une option: ");
@@ -103,6 +105,10 @@ void envoyer_message(int sock) {
     printf("Réponse du serveur: %s", buffer);
 }
 
+
+// ######################
+// FONCTIONS A TERMINER #
+// ######################
 void messages_non_lus(int sock) {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
@@ -111,7 +117,74 @@ void messages_non_lus(int sock) {
     exit(0);
 }
 
-// Traitement de la commande
+void info_message(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void modifier_message(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void supprimer_message(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void historique_message(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void bloquer_client(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void enlever_blocage(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void bannir_client(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void enlever_ban(int sock) {
+    char *requete = "/liste";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+// #######################
+// /FONCTIONS A TERMINER #
+// #######################
+
+// Traitement de la commande de l'utilisateur (avec vérification de rôle)
 void traiter_commande(int choix, int sock, char *role) {
     switch (choix) {
         case 1:
@@ -137,8 +210,7 @@ void traiter_commande(int choix, int sock, char *role) {
 
         case 5:
             if (strcmp(role, "membre") || strcmp(role, "pro")) {
-                // Traite l'option "Informations concernant un message"
-                printf("Informations sur un message...\n");
+                info_message(sock);
             } else {
                 printf("Option non disponible pour votre rôle.\n");
             }
@@ -146,17 +218,15 @@ void traiter_commande(int choix, int sock, char *role) {
 
         case 6:
             if (strcmp(role, "membre") || strcmp(role, "pro")) {
-                // Traite l'option "Modifier un message"
-                printf("Modification d'un message...\n");
+                modifier_message(sock);
             } else {
                 printf("Option non disponible pour votre rôle.\n");
             }
             break;
 
         case 7:
-            if (strcmp(role, "pro")) {
-                // Traite l'option "Historique des messages"
-                printf("Historique des messages avec un client...\n");
+            if (strcmp(role, "membre") || strcmp(role, "pro")) {
+                supprimer_message(sock);
             } else {
                 printf("Option non disponible pour votre rôle.\n");
             }
@@ -164,8 +234,7 @@ void traiter_commande(int choix, int sock, char *role) {
 
         case 8:
             if (strcmp(role, "pro")) {
-                // Traite l'option "Bloquer un client 24h"
-                printf("Bloquage d'un client...\n");
+                historique_message(sock);
             } else {
                 printf("Option non disponible pour votre rôle.\n");
             }
@@ -173,8 +242,7 @@ void traiter_commande(int choix, int sock, char *role) {
 
         case 9:
             if (strcmp(role, "pro")) {
-                // Traite l'option "Bannir un client définitivement"
-                printf("Bannissement d'un client...\n");
+                bloquer_client(sock);
             } else {
                 printf("Option non disponible pour votre rôle.\n");
             }
@@ -182,8 +250,23 @@ void traiter_commande(int choix, int sock, char *role) {
 
         case 10:
             if (strcmp(role, "pro")) {
-                // Traite l'option "Lever le ban d'un client"
-                printf("Levée du ban d'un client...\n");
+                enlever_blocage(sock);
+            } else {
+                printf("Option non disponible pour votre rôle.\n");
+            }
+            break;
+
+        case 11:
+            if (strcmp(role, "pro")) {
+                bannir_client(sock);
+            } else {
+                printf("Option non disponible pour votre rôle.\n");
+            }
+            break;
+
+        case 12:
+            if (strcmp(role, "pro")) {
+                enlever_ban(sock);
             } else {
                 printf("Option non disponible pour votre rôle.\n");
             }
@@ -193,6 +276,10 @@ void traiter_commande(int choix, int sock, char *role) {
             printf("Option invalide, essayez encore.\n");
     }
 }
+
+
+
+
 
 int main(int argc, char *argv[]) {
     // Vérifier si un port est passé en paramètre
@@ -245,7 +332,6 @@ int main(int argc, char *argv[]) {
         }
 
         traiter_commande(choix, sock, role);
-
     }
 
     return 0;

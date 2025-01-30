@@ -57,9 +57,10 @@ Si vous n'utilisez pas directement ```client.c```, vous pouvez profiter d'une mu
 |-----------------------------------|-------------------------------------------|---------------|
 | /message {id_compte} {message}    | Envoie un message au compte renseigné | Tous          |
 | /liste                             | Affiche la liste de vos messages non llus | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
-| /conversation {id_client} {?page=0} | Affiche l'historique des messages avec le client spécifié | <span class="role pro">Pro</span> |
 | /info {id_message}       | Affiche les informations du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 | /modifie {id_message} {nouveau_message}       | Remplace le contenu du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
+| /supprime {id_message} | Supprime un de vos messages | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
+| /conversation {id_client} {?page=0} | Affiche l'historique des messages avec le client spécifié | <span class="role pro">Pro</span> |
 
 #### Bannissement
 | Commande     | Commentaire                                 | Qui ?          |
