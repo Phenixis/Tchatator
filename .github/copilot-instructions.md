@@ -26,14 +26,14 @@ Voici un id_client professionnel : 5
 
 ## Préambule
 À toute commande, le SERVICE peut renvoyer les codes suivants :
+- `400/BAD REQUEST` : La commande n'est pas reconnue/mal formulée.
 - `401/UNAUTHORIZED` : La connexion n'est pas identifiée ou le CLIENT n'a pas les droits pour accéder à cette commande (commande admin par exemple)
 - `403/FORBIDDEN` : Le CLIENT est banni.
-- `406/NOT ACCTEPTABLE` : La commande n'est pas reconnue.
 - `429/TOO MANY REQUESTS` : Limite de requêtes atteinte.
 - `500/SERVER ERROR` : Le serveur a rencontré une erreur imprévue.
 - `501/NOT IMPLEMENTED` : La commande est reconnue mais n'est pas encore fonctionnelle.
 
-À toute commande, le CLIENT peut ajouter l'option `-n` ou `--help` pour avoir plus d'informations sur comment utiliser la commande.
+À toute commande, le CLIENT peut ajouter l'option `-h` ou `--help` pour avoir plus d'informations sur comment utiliser la commande.
 
 ## Identification
 ### Connexion
@@ -98,6 +98,13 @@ Voici un id_client professionnel : 5
   - `200/OK` : CLIENT bloqué.
   - `409/CONFLICT` : CLIENT déjà bloqué.
   - `404/NOT FOUND` : `id_client` inexistant.
+
+## Déblocage d'un CLIENT
+- **Commande** : `/debloque {id_client}`
+- **Réponses possibles** :
+  - `200/OK` : Déblocage effectué.
+  - `404/NOT FOUND` : `id_client` inexistant.
+  - `409/CONFLICT` : CLIENT non bloqué.
 
 ## Bannissement d'un CLIENT
 ### Bannissement

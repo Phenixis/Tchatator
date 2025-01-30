@@ -139,7 +139,7 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
 
         strcat(message, "\n");
 
-        write(cnx, message, strlen(message));
+        int len_written = write(cnx, message, strlen(message));
         return 1;
     }
     else
@@ -183,7 +183,7 @@ PGconn *get_connection(struct param *params, int verbose)
 PGresult *execute(PGconn *conn, char *query)
 {
     PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
     {
         fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
         PQclear(res);
@@ -272,6 +272,9 @@ int main(int argc, char *argv[])
     int cnx_lecture;
     int cnx_ecriture;
     struct sockaddr_in conn_addr;
+    char id_compte_client[1024] = "";
+    char buffer[2048];
+    PGconn *conn = get_connection(params, verbose);
 
     if (mode_dev == 0)
     {
@@ -347,7 +350,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-        cnx_lecture = open("to_tchatator", O_RDONLY);
+        cnx_lecture = open("to_tchatator", O_RDONLY | O_ASYNC);
+        ;
         if (cnx_lecture == -1)
         {
             perror("Erreur lors de l'ouverture du pipe en lecture");
@@ -361,15 +365,14 @@ int main(int argc, char *argv[])
         }
     }
     char *client_ip = inet_ntoa(conn_addr.sin_addr);
-    PGconn *conn = get_connection(params, verbose);
-    char buffer[2048];
-    char id_compte_client[1024];
-    int len = read(cnx_lecture, buffer, sizeof(buffer) - 1);
-    buffer[len] = '\0';
-
-    while (len > 0)
+    int len;
+    char *trimmed_buffer;
+    do
     {
-        char *trimmed_buffer = trim_newline(buffer);
+        free(trimmed_buffer);
+        len = read(cnx_lecture, buffer, sizeof(buffer) - 1);
+        buffer[len] = '\0';
+        trimmed_buffer = trim_newline(buffer);
 
         // Log the message
         char *to_log = malloc(strlen(trimmed_buffer) + 100);
@@ -389,7 +392,10 @@ int main(int argc, char *argv[])
                 logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
                 strcpy(id_compte_client, "");
                 send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
-                break;
+                if (mode_dev == 0)
+                {
+                    break;
+                }
             }
         }
         else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
@@ -432,7 +438,7 @@ int main(int argc, char *argv[])
             }
             else
             {
-                send_answer(cnx_ecriture, params, "406", id_compte_client, client_ip, verbose);
+                send_answer(cnx_ecriture, params, "400", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
@@ -592,10 +598,14 @@ int main(int argc, char *argv[])
                 write(cnx_ecriture, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
                 send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
             }
-            else
+            else if (strcmp(id_compte_client, "admin") == 0)
             {
                 read_param_file(params, param_file);
                 send_answer(cnx_ecriture, params, "200", id_compte_client, client_ip, verbose);
+            }
+            else
+            {
+                send_answer(cnx_ecriture, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
@@ -687,13 +697,9 @@ int main(int argc, char *argv[])
         }
         else
         {
-            send_answer(cnx_ecriture, params, "404", id_compte_client, client_ip, verbose);
+            send_answer(cnx_ecriture, params, "400", id_compte_client, client_ip, verbose);
         }
-
-        free(trimmed_buffer);
-        len = read(cnx_lecture, buffer, sizeof(buffer) - 1);
-        buffer[len] = '\0';
-    }
+    } while (len > 0);
 
     close(cnx_lecture);
     if (mode_dev == 1)
