@@ -17,6 +17,23 @@ struct param
     char *value;
 };
 
+// Roles possibles que peut avoir le client en se connectant notamment
+typedef enum {
+    AUCUN = 0,
+    MEMBRE = 1,
+    PRO = 2,
+    ADMIN = 3
+} Role;
+const char* role_to_string(Role role) {
+    switch(role) {
+        case AUCUN: return "aucun";
+        case MEMBRE: return "membre";
+        case PRO: return "pro";
+        case ADMIN: return "admin";
+        default: return "unknown";
+    }
+}
+
 char *trim_newline(const char *str)
 {
     int len = strlen(str);
@@ -118,13 +135,7 @@ int logs(char *message, char *clientID, char *clientIP, int verbose)
     return 0;
 }
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
 // Assume get_param() and logs() are already defined elsewhere.
-
 char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose) {
     char *value = get_param(params, code);
     
@@ -173,6 +184,39 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
         return send_answer(cnx, params, "500", clientID, clientIP, verbose);
     }
 }
+
+char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose) {
+    // Convertir le rôle en chaîne de caractères
+    const char *string_role = role_to_string(role);
+
+    // Log le message
+    size_t log_len = strlen(string_role) + 100;
+    char *to_log = malloc(log_len);
+    
+    if (to_log) {
+        // Créer le log
+        snprintf(to_log, log_len, "Réponse envoyée : %s", string_role);
+        logs(to_log, clientID, clientIP, verbose);
+        
+        // Envoi du rôle
+        ssize_t bytes_sent = write(cnx, string_role, strlen(string_role));
+        
+        if (bytes_sent == -1) {
+            // Gérer l'erreur d'envoi
+            perror("Erreur lors de l'envoi du rôle");
+            free(to_log);
+            return 0;
+        }
+        
+        // Si l'envoi a réussi, on libère la mémoire allouée pour le log
+        free(to_log);
+    } else {
+        perror("Échec de l'allocation de mémoire pour le log");
+        return 0;
+    }
+    return 1;  // Rôle envoyé avec succès
+}
+
 
 void exit_on_error(PGconn *conn)
 {
@@ -241,6 +285,7 @@ int main(int argc, char *argv[])
 {
     char *param_file = ".tchatator"; // Fichier de paramètres par défaut
     int verbose = 0;
+    Role role = AUCUN;
 
     for (int i = 1; i < argc; i++)
     {
@@ -378,10 +423,19 @@ int main(int argc, char *argv[])
         sprintf(to_log, "Message reçu : %s", trimmed_buffer);
         logs(to_log, id_compte_client, client_ip, verbose);
 
+        // ###############
+        // # EXTRA UTILS #
+        // ###############
+        if (strncmp(trimmed_buffer, "/role", 5) == 0)
+        {
+            logs("Commande /role", id_compte_client, client_ip, verbose);
+            send_role(cnx, role, id_compte_client, client_ip, verbose);
+        }
+
         // ###########################
         // # CONNEXION & DECONNEXION #
         // ###########################
-        if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
+        else if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
         {
             if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
             {
@@ -408,15 +462,26 @@ int main(int argc, char *argv[])
             else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
             {
                 char *api_key = trimmed_buffer + 11;
-                char query[256];
-                snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
+                char query[512];
 
-                PGresult *res = execute(conn, query);
+                // Essayer de se connecter en tant que membre
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db._membre WHERE api_key = '%s';", api_key);
+                PGresult *res_membre = execute(conn, query);
+
+                // Sinon essayer de se connecter en tant que professionnel
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db._professionnel WHERE api_key = '%s';", api_key);
+                PGresult *res_pro = execute(conn, query);
 
                 // Se connecter en tant que membre ou pro
-                if (PQntuples(res) > 0)
+                if (PQntuples(res_membre) > 0 || PQntuples(res_pro) > 0)
                 {
-                    strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+                    if (PQntuples(res_membre) > 0) {
+                        role = MEMBRE;
+                        strcpy(id_compte_client, PQgetvalue(res_membre, 0, 0));
+                    } else {
+                        role = PRO;
+                        strcpy(id_compte_client, PQgetvalue(res_pro, 0, 0));
+                    }
                     char update_query[256];
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
                     execute(conn, update_query);
@@ -429,15 +494,17 @@ int main(int argc, char *argv[])
                     if (strcmp(api_key, admin_api_key) == 0)
                     {
                         strcpy(id_compte_client, "admin");
+                        role = ADMIN;
                         send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     }
                     else
                     {
-                        send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     }
                 }
 
-                PQclear(res);
+                PQclear(res_membre);
+                PQclear(res_pro);
             }
             // Aucune clé API correspondante trouvée
             else
