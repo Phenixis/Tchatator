@@ -55,41 +55,6 @@ void afficher_menu(char *role)
         printf("2. Quitter\n");
     }
 
-    printf("\n=== Menu ===\n");
-    printf("1.  Me connecter\n");
-    printf("2.  Envoyer un message\n");
-    printf("3.  Me déconnecter et quitter\n");
-
-    // Si connecté
-    if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
-    {
-        printf("4.  Messages non lus\n");
-        printf("5.  Informations concernant un de mes messages\n");
-        printf("6.  Modifier un de mes messages\n");
-        printf("7.  Supprimer un de mes messages\n");
-    }
-
-    // Si pro
-    if (strcmp(role, "pro") == 0)
-    {
-        printf("8.  Historique des messages avec un client\n");
-        printf("9.  Bloquer un client 24h\n");
-        printf("10  Lever le blocage d'un client\n");
-        printf("11. Bannir un client définitivement\n");
-        printf("12. Lever le ban d'un client\n");
-    }
-
-    // Si admin
-    if (strcmp(role, "admin") == 0)
-    {
-        printf("13. Synchroniser les paramètres\n");
-        printf("14. Afficher les logs\n");
-        printf("15. Bloquer un client 24h\n");
-        printf("16. Lever le blocage d'un client\n");
-        printf("17. Bannir un client définitivement\n");
-        printf("18. Lever le ban d'un client\n");
-    }
-
     printf("Choisissez une option: ");
 }
 
