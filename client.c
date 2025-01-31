@@ -16,52 +16,44 @@ void afficher_menu(char *role)
     if (strcmp(role, "membre") == 0)
     {
         printf("\n=== Menu ===\n");
-        printf("1.  Envoyer un message\n");
-        printf("2.  Messages non lus\n");
-        printf("3.  Informations concernant un de mes messages\n");
-        printf("4.  Modifier un de mes messages\n");
-        printf("5.  Supprimer un de mes messages\n");
-        printf("6.  Me déconnecter et quitter\n");
+        printf("1. Envoyer un message\n");
+        printf("2. Messages non lus\n");
+        printf("3. Informations concernant un de mes messages\n");
+        printf("4. Modifier un de mes messages\n");
+        printf("5. Supprimer un de mes messages\n");
+        printf("6. Historique des messages avec un client\n");
+        printf("7. Me déconnecter et quitter\n");
     }
     else if (strcmp(role, "pro") == 0)
     {
         printf("\n=== Menu ===\n");
-        printf("1.  Envoyer un message\n");
-        printf("2.  Messages non lus\n");
-        printf("3.  Informations concernant un de mes messages\n");
-        printf("4.  Modifier un de mes messages\n");
-        printf("5.  Supprimer un de mes messages\n");
-        printf("6.  Historique des messages avec un client\n");
-        printf("7.  Bloquer un client 24h\n");
-        printf("8.  Lever le blocage d'un client\n");
-        printf("9.  Bannir un client définitivement\n");
-        printf("10. Lever le ban d'un client\n");
-        printf("11. Me déconnecter et quitter\n");
+        printf("1. Envoyer un message\n");
+        printf("2. Messages non lus\n");
+        printf("3. Informations concernant un de mes messages\n");
+        printf("4. Modifier un de mes messages\n");
+        printf("5. Supprimer un de mes messages\n");
+        printf("6. Historique des messages avec un client\n");
+        printf("7. Bloquer un client 24h\n");
+        printf("8. Lever le blocage d'un client\n");
+        printf("9. Me déconnecter et quitter\n");
     }
     else if (strcmp(role, "admin") == 0)
     {
         printf("\n=== Menu ===\n");
-        printf("1.  Envoyer un message\n");
-        printf("2.  Messages non lus\n");
-        printf("3.  Informations concernant un de mes messages\n");
-        printf("4.  Modifier un de mes messages\n");
-        printf("5.  Supprimer un de mes messages\n");
-        printf("6.  Historique des messages avec un client\n");
-        printf("7.  Bloquer un client 24h\n");
-        printf("8.  Lever le blocage d'un client\n");
-        printf("9.  Bannir un client définitivement\n");
-        printf("10. Lever le ban d'un client\n");
-        printf("11. Synchroniser les paramètres\n");
-        printf("12. Afficher les logs\n");
-        printf("13. Me déconnecter et quitter\n");
+        printf("1. Bloquer un client 24h\n");
+        printf("2. Lever le blocage d'un client\n");
+        printf("3. Bannir un client définitivement\n");
+        printf("4. Lever le ban d'un client\n");
+        printf("5. Synchroniser les paramètres\n");
+        printf("6. Afficher les logs\n");
+        printf("7. Me déconnecter et quitter\n");
     }
     else
     {
         printf("\n=== Menu ===\n");
-        printf("1.  Me connecter\n");
-        printf("2.  Quitter\n");
+        printf("1. Me connecter\n");
+        printf("2. Quitter\n");
     }
-
 
     printf("\n=== Menu ===\n");
     printf("1.  Me connecter\n");
@@ -145,6 +137,7 @@ void connexion(int sock)
 
 void deconnexion(int sock)
 {
+    printf("Merci d'avoir utilisé Tchatator...\n");
     char *requete = "/deconnexion";
     send(sock, requete, strlen(requete), 0);
 
@@ -272,22 +265,60 @@ void traiter_commande(int choix, int sock, char *role)
     switch (choix)
     {
     case 1:
-        connexion(sock);
-        update_role(sock, role); // Met à jour le rôle après la connexion
-        break;
-    case 2:
-        envoyer_message(sock);
-        break;
-    case 3:
-        printf("Merci d'avoir utilisé Tchatator...\n");
-        deconnexion(sock);
+        if (strcmp(role, "membre") == 0 | strcmp(role, "pro") == 0)
+        {
+            envoyer_message(sock);
+        }
+        else if (strcmp(role, "admin") == 0)
+        {
+            bloquer_client(sock);
+        }
+        else
+        {
+            connexion(sock);
+            update_role(sock, role); // Met à jour le rôle après la connexion
+        }
         break;
 
-    // Options disponibles selon le rôle
-    case 4:
+    case 2:
         if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
             messages_non_lus(sock);
+        }
+        else if (strcmp(role, "admin"))
+        {
+            enlever_blocage(sock);
+        }
+        else
+        {
+            deconnexion(sock);
+        }
+        break;
+
+    case 3:
+        if (strcmp(role, "membre") || strcmp(role, "pro"))
+        {
+            info_message(sock);
+        }
+        else if (strcmp(role, "admin"))
+        {
+            bannir_client(sock);
+        }
+        else
+        {
+            printf("Option non disponible pour votre rôle.\n");
+        }
+        break;
+
+    case 4:
+        if (strcmp(role, "membre") || strcmp(role, "pro"))
+        {
+            modifier_message(sock);
+            // messages_non_lus(sock);
+        }
+        else if (strcmp(role, "admin"))
+        {
+            enlever_ban(sock);
         }
         else
         {
@@ -298,7 +329,12 @@ void traiter_commande(int choix, int sock, char *role)
     case 5:
         if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            info_message(sock);
+            supprimer_message(sock);
+            // info_message(sock);
+        }
+        else if (strcmp(role, "admin"))
+        {
+            sync(sock);
         }
         else
         {
@@ -309,7 +345,12 @@ void traiter_commande(int choix, int sock, char *role)
     case 6:
         if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            modifier_message(sock);
+            historique_message(sock);
+            // modifier_message(sock);
+        }
+        else if (strcmp(role, "admin"))
+        {
+            logs(sock);
         }
         else
         {
@@ -318,9 +359,14 @@ void traiter_commande(int choix, int sock, char *role)
         break;
 
     case 7:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
+        if (strcmp(role, "membre") || strcmp(role, "admin"))
         {
-            supprimer_message(sock);
+            deconnexion(sock);
+            // supprimer_message(sock);
+        }
+        else if (strcmp(role, "pro"))
+        {
+            bloquer_client(sock);
         }
         else
         {
@@ -331,7 +377,8 @@ void traiter_commande(int choix, int sock, char *role)
     case 8:
         if (strcmp(role, "pro"))
         {
-            historique_message(sock);
+            enlever_blocage(sock);
+            // historique_message(sock);
         }
         else
         {
@@ -342,100 +389,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 9:
         if (strcmp(role, "pro"))
         {
-            bloquer_client(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-
-    case 10:
-        if (strcmp(role, "pro"))
-        {
-            enlever_blocage(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-
-    case 11:
-        if (strcmp(role, "pro"))
-        {
-            bannir_client(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-
-    case 12:
-        if (strcmp(role, "pro"))
-        {
-            enlever_ban(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-    case 13:
-        if (strcmp(role, "admin"))
-        {
-            sync(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-    case 14:
-        if (strcmp(role, "admin"))
-        {
-            logs(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-    case 15:
-        if (strcmp(role, "admin"))
-        {
-            bloquer_client(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-    case 16:
-        if (strcmp(role, "admin"))
-        {
-            enlever_blocage(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-    case 17:
-        if (strcmp(role, "admin"))
-        {
-            bannir_client(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-    case 18:
-        if (strcmp(role, "admin"))
-        {
-            enlever_ban(sock);
+            deconnexion(sock);
         }
         else
         {
