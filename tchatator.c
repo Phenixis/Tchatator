@@ -18,19 +18,27 @@ struct param
 };
 
 // Roles possibles que peut avoir le client en se connectant notamment
-typedef enum {
+typedef enum
+{
     AUCUN = 0,
     MEMBRE = 1,
     PRO = 2,
     ADMIN = 3
 } Role;
-const char* role_to_string(Role role) {
-    switch(role) {
-        case AUCUN: return "aucun";
-        case MEMBRE: return "membre";
-        case PRO: return "pro";
-        case ADMIN: return "admin";
-        default: return "unknown";
+const char *role_to_string(Role role)
+{
+    switch (role)
+    {
+    case AUCUN:
+        return "aucun";
+    case MEMBRE:
+        return "membre";
+    case PRO:
+        return "pro";
+    case ADMIN:
+        return "admin";
+    default:
+        return "unknown";
     }
 }
 
@@ -136,15 +144,18 @@ int logs(char *message, char *clientID, char *clientIP, int verbose)
 }
 
 // Assume get_param() and logs() are already defined elsewhere.
-char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose) {
+char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose)
+{
     char *value = get_param(params, code);
-    
-    if (value) {
+
+    if (value)
+    {
         // Donner la bonne longueur à message
         int message_length = strlen(code) + strlen(value) + 2; // 1 pour le '/' et 1 pour '\0'
         char *message = malloc(message_length);
-        
-        if (!message) {
+
+        if (!message)
+        {
             perror("Failed to allocate memory for message");
             return 0;
         }
@@ -154,11 +165,14 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
 
         // Log le message
         char *to_log = malloc(strlen(message) + 100);
-        if (to_log) {
+        if (to_log)
+        {
             snprintf(to_log, strlen(message) + 100, "Réponse envoyée : %s", message);
             logs(to_log, clientID, clientIP, verbose);
             free(to_log);
-        } else {
+        }
+        else
+        {
             perror("Failed to allocate memory for logging");
             free(message);
             return 0;
@@ -166,11 +180,14 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
 
         // Add the newline character to the message
         char *message_with_newline = malloc(strlen(message) + 2); // +1 for newline, +1 for null terminator
-        if (message_with_newline) {
+        if (message_with_newline)
+        {
             snprintf(message_with_newline, strlen(message) + 2, "%s\n", message);
             write(cnx, message_with_newline, strlen(message_with_newline));
             free(message_with_newline);
-        } else {
+        }
+        else
+        {
             perror("Failed to allocate memory for message with newline");
             free(message);
             return 0;
@@ -179,44 +196,50 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
         free(message);
 
         return 1;
-    } else {
-        //Aucune valeur trouvé pour le code donné
+    }
+    else
+    {
+        // Aucune valeur trouvé pour le code donné
         return send_answer(cnx, params, "500", clientID, clientIP, verbose);
     }
 }
 
-char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose) {
+char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
+{
     // Convertir le rôle en chaîne de caractères
     const char *string_role = role_to_string(role);
 
     // Log le message
     size_t log_len = strlen(string_role) + 100;
     char *to_log = malloc(log_len);
-    
-    if (to_log) {
+
+    if (to_log)
+    {
         // Créer le log
         snprintf(to_log, log_len, "Réponse envoyée : %s", string_role);
         logs(to_log, clientID, clientIP, verbose);
-        
+
         // Envoi du rôle
         ssize_t bytes_sent = write(cnx, string_role, strlen(string_role));
-        
-        if (bytes_sent == -1) {
+
+        if (bytes_sent == -1)
+        {
             // Gérer l'erreur d'envoi
             perror("Erreur lors de l'envoi du rôle");
             free(to_log);
             return 0;
         }
-        
+
         // Si l'envoi a réussi, on libère la mémoire allouée pour le log
         free(to_log);
-    } else {
+    }
+    else
+    {
         perror("Échec de l'allocation de mémoire pour le log");
         return 0;
     }
-    return 1;  // Rôle envoyé avec succès
+    return 1; // Rôle envoyé avec succès
 }
-
 
 void exit_on_error(PGconn *conn)
 {
@@ -498,15 +521,11 @@ int main(int argc, char *argv[])
                 char query[512];
 
                 // Essayer de se connecter en tant que membre
-                snprintf(query, sizeof(query), "SELECT * FROM sae_db._membre WHERE api_key = '%s';", api_key);
-                PGresult *res_membre = execute(conn, query);
-
-                // Sinon essayer de se connecter en tant que professionnel
-                snprintf(query, sizeof(query), "SELECT * FROM sae_db._professionnel WHERE api_key = '%s';", api_key);
-                PGresult *res_pro = execute(conn, query);
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
+                PGresult *res = execute(conn, query);
 
                 // Se connecter en tant que membre ou pro
-                if (PQntuples(res_membre) > 0 || PQntuples(res_pro) > 0)
+                if (PQntuples(res) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
 
@@ -516,19 +535,22 @@ int main(int argc, char *argv[])
                         strcpy(id_compte_client, "");
                         continue;
                     }
-                  
-                    if (PQntuples(res_membre) > 0) {
+
+                    if (client_est_membre(conn, id_compte_client) > 0)
+                    {
                         role = MEMBRE;
-                        strcpy(id_compte_client, PQgetvalue(res_membre, 0, 0));
-                    } else {
-                        role = PRO;
-                        strcpy(id_compte_client, PQgetvalue(res_pro, 0, 0));
                     }
-                  
+                    else
+                    {
+                        role = PRO;
+                    }
+
                     char update_query[256];
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
                     execute(conn, update_query);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                    
+                    PQclear(res);
                 }
                 // Se connecter en tant qu'admin
                 else
@@ -545,9 +567,6 @@ int main(int argc, char *argv[])
                         send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     }
                 }
-
-                PQclear(res_membre);
-                PQclear(res_pro);
             }
             // Aucune clé API correspondante trouvée
             else
@@ -611,7 +630,8 @@ int main(int argc, char *argv[])
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             // Si pas connecté ou admin, aucun message non lu (no content)
-            else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0) {
+            else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0)
+            {
                 send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
             }
             else
