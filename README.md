@@ -11,10 +11,9 @@ Pour les requêtes à la base de données, lors de la connexion, l'id du compte 
 - [x] Connexion -> 200/OK
 - [x] Connexion -> 401/UNAUTHORIZED
 - [x] Déconnexion -> 200/OK
-- [ ] Envoi de message -> 200/OK
-- [ ] Envoi de message -> 200/OK
-- [ ] Envoi de message -> 413/PAYLOAD TOO LARGE
-- [ ] Envoi de message -> 404/NOT FOUND
+- [x] Envoi de message -> 200/OK
+- [x] Envoi de message -> 413/PAYLOAD TOO LARGE
+- [x] Envoi de message -> 404/NOT FOUND
 - [ ] Liste des messages non lus -> 200/OK
 - [ ] Liste des messages non lus -> 204/NO CONTENT
 - [ ] Liste des messages non lus -> 416/RANGE NOT SATISFIABLE
