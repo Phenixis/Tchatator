@@ -196,6 +196,26 @@ int client_existe(PGconn *conn, char *id_client)
     return result;
 }
 
+int client_est_membre(PGconn *conn, char *id_client)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._membre WHERE id_membre = '%s';", id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res) > 0;
+    PQclear(res);
+    return result;
+}
+
+int client_est_pro(PGconn *conn, char *id_client)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._professionnel WHERE id_professionnel = '%s';", id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res) > 0;
+    PQclear(res);
+    return result;
+}
+
 int client_est_banni(PGconn *conn, char *id_client)
 {
     char query[256];
@@ -415,7 +435,32 @@ int main(int argc, char *argv[])
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                char *id_receveur = strtok(trimmed_buffer + 9, " ");
+                char *message = strtok(NULL, "");
+
+                if (client_existe(conn, id_receveur) == 0)
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                if (client_est_banni(conn, id_receveur) == 1)
+                {
+                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                if (strcmp(id_compte_client, "admin") != 0)
+                {
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                char query[256];
+                snprintf(query, sizeof(query), "INSERT INTO sae_db._message (id_expediteur, id_destinataire, message) VALUES ('%s', '%s', '%s');", id_compte_client, id_receveur, message);
+                execute(conn, query);
+
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
@@ -511,11 +556,11 @@ int main(int argc, char *argv[])
                     send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
                     continue;
                 }
-                
+
                 char query[256];
                 snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
                 execute(conn, query);
-                
+
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
