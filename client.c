@@ -137,6 +137,22 @@ void envoyer_message(int sock)
     printf("Réponse du serveur: %s", buffer);
 }
 
+void synchronize(int sock) {
+    char *requete = "/sync";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void logs(int sock) {
+    char *requete = "/logs";
+    send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
 // ######################
 // FONCTIONS A TERMINER #
 // ######################
@@ -257,6 +273,7 @@ void traiter_commande(int choix, int sock, char *role)
         else
         {
             deconnexion(sock);
+            update_role(sock, role); // Met à jour le rôle après la connexion
         }
         break;
 
@@ -299,7 +316,7 @@ void traiter_commande(int choix, int sock, char *role)
         }
         else if (strcmp(role, "admin"))
         {
-            sync(sock);
+            synchronize(sock);
         }
         else
         {
