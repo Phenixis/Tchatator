@@ -354,12 +354,15 @@ int main(int argc, char *argv[])
     PGconn *conn = get_connection(params, verbose);
     char buffer[2048];
     char id_compte_client[1024];
-    int len = read(cnx, buffer, sizeof(buffer) - 1);
-    buffer[len] = '\0';
+    int len;
+    char *trimmed_buffer;
 
-    while (len > 0)
+    do
     {
-        char *trimmed_buffer = trim_newline(buffer);
+        free(trimmed_buffer);
+        len = read(cnx, buffer, sizeof(buffer) - 1);
+        buffer[len] = '\0';
+        trimmed_buffer = trim_newline(buffer);
 
         // Log the message
         char *to_log = malloc(strlen(trimmed_buffer) + 100);
@@ -400,6 +403,14 @@ int main(int argc, char *argv[])
                 if (PQntuples(res) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+
+                    if (client_est_banni(conn, id_compte_client) == 1) // Interdit de se connecter si le client est banni
+                    {
+                        send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                        strcpy(id_compte_client, "");
+                        continue;
+                    }
+
                     char update_query[256];
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id = '%s';", id_compte_client);
                     execute(conn, update_query);
@@ -705,11 +716,7 @@ int main(int argc, char *argv[])
         {
             send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
         }
-
-        free(trimmed_buffer);
-        len = read(cnx, buffer, sizeof(buffer) - 1);
-        buffer[len] = '\0';
-    }
+    } while (len > 0);
 
     close(cnx);
     close(sock);
