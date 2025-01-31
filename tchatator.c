@@ -518,6 +518,7 @@ int main(int argc, char *argv[])
             else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
             {
                 char *api_key = trimmed_buffer + 11;
+                char *admin_api_key = get_param(params, "admin_api_key");
                 char query[512];
 
                 // Essayer de se connecter en tant que membre
@@ -549,23 +550,19 @@ int main(int argc, char *argv[])
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
                     execute(conn, update_query);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                    
+
                     PQclear(res);
                 }
                 // Se connecter en tant qu'admin
+                else if (strcmp(api_key, admin_api_key) == 0)
+                {
+                    strcpy(id_compte_client, "admin");
+                    role = ADMIN;
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
                 else
                 {
-                    char *admin_api_key = get_param(params, "admin_api_key");
-                    if (strcmp(api_key, admin_api_key) == 0)
-                    {
-                        strcpy(id_compte_client, "admin");
-                        role = ADMIN;
-                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                    }
-                    else
-                    {
-                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-                    }
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
                 }
             }
             // Aucune clé API correspondante trouvée
