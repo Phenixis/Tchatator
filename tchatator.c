@@ -252,7 +252,7 @@ PGconn *get_connection(struct param *params, int verbose)
 PGresult *execute(PGconn *conn, char *query)
 {
     PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
+    if (PQresultStatus(res) == PGRES_FATAL_ERROR)
     {
         fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
         PQclear(res);
@@ -261,16 +261,47 @@ PGresult *execute(PGconn *conn, char *query)
     return res;
 }
 
+/*
+Renvoie 0 si le client n'existe pas, 1 ou plus sinon
+*/
 int client_existe(PGconn *conn, char *id_client)
 {
     char query[256];
     snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE id_compte = '%s';", id_client);
     PGresult *res = execute(conn, query);
-    int result = PQntuples(res) > 0;
+    int result = PQntuples(res);
+    PQclear(res);
+    return result;
+}
+/*
+Renvoie 0 si le client n'est pas membre, 1 ou plus sinon
+*/
+int client_est_membre(PGconn *conn, char *id_client)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._membre WHERE id_compte = '%s';", id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res);
     PQclear(res);
     return result;
 }
 
+/*
+Renovie 0 si le client n'est pas professionnel, 1 ou plus sinon
+*/
+int client_est_pro(PGconn *conn, char *id_client)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._professionnel WHERE id_compte = '%s';", id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res);
+    PQclear(res);
+    return result;
+}
+
+/*
+Renvoie 0 si le client est banni, 1 ou plus sinon
+*/
 int client_est_banni(PGconn *conn, char *id_client)
 {
     char query[256];
@@ -409,15 +440,17 @@ int main(int argc, char *argv[])
     char *client_ip = inet_ntoa(conn_addr.sin_addr);
     PGconn *conn = get_connection(params, verbose);
     char buffer[2048];
-    char id_compte_client[50];
+    char id_compte_client[1024];
+    int len;
+    char *trimmed_buffer;
 
-    // Attente du message client
-    int len = read(cnx, buffer, sizeof(buffer) - 1);
-    buffer[len] = '\0';
-
-    while (len > 0)
+    do
     {
-        char *trimmed_buffer = trim_newline(buffer);
+        free(trimmed_buffer);
+        len = read(cnx, buffer, sizeof(buffer) - 1);
+        buffer[len] = '\0';
+        trimmed_buffer = trim_newline(buffer);
+
         // Afficher le message reçu
         char *to_log = malloc(strlen(trimmed_buffer) + 100);
         sprintf(to_log, "Message reçu : %s", trimmed_buffer);
@@ -475,6 +508,15 @@ int main(int argc, char *argv[])
                 // Se connecter en tant que membre ou pro
                 if (PQntuples(res_membre) > 0 || PQntuples(res_pro) > 0)
                 {
+                    strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+
+                    if (client_est_banni(conn, id_compte_client) == 1) // Interdit de se connecter si le client est banni
+                    {
+                        send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                        strcpy(id_compte_client, "");
+                        continue;
+                    }
+                  
                     if (PQntuples(res_membre) > 0) {
                         role = MEMBRE;
                         strcpy(id_compte_client, PQgetvalue(res_membre, 0, 0));
@@ -482,6 +524,7 @@ int main(int argc, char *argv[])
                         role = PRO;
                         strcpy(id_compte_client, PQgetvalue(res_pro, 0, 0));
                     }
+                  
                     char update_query[256];
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
                     execute(conn, update_query);
@@ -524,9 +567,40 @@ int main(int argc, char *argv[])
                 write(cnx, help_message, strlen(help_message));
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
+            else if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
+            {
+                char *id_receveur = strtok(trimmed_buffer + 9, " ");
+                char *message = strtok(NULL, "");
+
+                if (client_existe(conn, id_receveur) == 0 || client_est_banni(conn, id_receveur) >= 1) // Si le client est banni, on le considère comme "inexistant"
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                if ((client_est_pro(conn, id_compte_client) > 0 && client_est_pro(conn, id_receveur) == 0) || (client_est_membre(conn, id_compte_client) > 0 && client_est_membre(conn, id_receveur) == 0))
+                {
+                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                int taille_maxi = atoi(get_param(params, "max_message_size"));
+
+                if (strlen(message) > taille_maxi)
+                {
+                    send_answer(cnx, params, "413", id_compte_client, client_ip, verbose);
+                    continue;
+                }
+
+                char query[taille_maxi + 256];
+                snprintf(query, sizeof(query), "INSERT INTO sae_db._message (id_envoyeur, id_receveur, message) VALUES ('%s', '%s', '%s');", id_compte_client, id_receveur, message);
+                execute(conn, query);
+
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
@@ -799,11 +873,7 @@ int main(int argc, char *argv[])
         {
             send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
         }
-
-        free(trimmed_buffer);
-        len = read(cnx, buffer, sizeof(buffer) - 1);
-        buffer[len] = '\0';
-    }
+    } while (len > 0);
 
     close(cnx);
     close(sock);
