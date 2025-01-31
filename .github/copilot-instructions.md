@@ -46,6 +46,7 @@ Un fichier de paramétrage '.tchatator' contiendra les informations suivantes :
 - **Réponses possibles** :
   - `200/OK` : Message envoyé.
   - `404/NOT FOUND` : Destinataire inexistant.
+  - `409/CONFLICT` : Destinataire du même côté que l'émetteur (pro->pro ou client->client).
   - `413/PAYLOAD TOO LARGE` : Message trop long.
   - `423/LOCKED` : Le destinataire vous a bloqué pour une durée maximale de 24h.
 
