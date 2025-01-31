@@ -17,6 +17,23 @@ struct param
     char *value;
 };
 
+// Roles possibles que peut avoir le client en se connectant notamment
+typedef enum {
+    AUCUN = 0,
+    MEMBRE = 1,
+    PRO = 2,
+    ADMIN = 3
+} Role;
+const char* role_to_string(Role role) {
+    switch(role) {
+        case AUCUN: return "aucun";
+        case MEMBRE: return "membre";
+        case PRO: return "pro";
+        case ADMIN: return "admin";
+        default: return "unknown";
+    }
+}
+
 char *trim_newline(const char *str)
 {
     int len = strlen(str);
@@ -103,45 +120,103 @@ int logs(char *message, char *clientID, char *clientIP, int verbose)
     struct tm *local = localtime(&now);
     char time_str[100];
     strftime(time_str, sizeof(time_str), "%d/%m/%Y - %H:%M:%S", local);
-    if (verbose == 1)
-    {
-        printf("[date+heure:%s] [id_client:%s] [ip_client:%s] : %s\n", time_str, clientID, clientIP, message);
-    }
     FILE *file = fopen("tchatator.log", "a");
     if (!file)
     {
-        perror("fopen failed");
+        perror("fopen failed on tchatator.log");
         return 1;
+    }
+    if (verbose == 1)
+    {
+        printf("[date+heure:%s] [id_client:%s] [ip_client:%s] : %s\n", time_str, clientID, clientIP, message);
     }
     fprintf(file, "[date+heure:%s] [id_client:%s] [ip_client:%s] : %s\n", time_str, clientID, clientIP, message);
     fclose(file);
     return 0;
 }
 
-char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose)
-{
+// Assume get_param() and logs() are already defined elsewhere.
+char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose) {
     char *value = get_param(params, code);
-    char message[1024] = "";
-    if (value)
-    {
-        strcat(strcat(strcat(message, code), "/"), value);
+    
+    if (value) {
+        // Donner la bonne longueur à message
+        int message_length = strlen(code) + strlen(value) + 2; // 1 pour le '/' et 1 pour '\0'
+        char *message = malloc(message_length);
+        
+        if (!message) {
+            perror("Failed to allocate memory for message");
+            return 0;
+        }
 
-        // On log le message avant d'y ajouter le caractère de fin de ligne
+        // Construire dynamiquement le message
+        snprintf(message, message_length, "%s/%s", code, value);
+
+        // Log le message
         char *to_log = malloc(strlen(message) + 100);
-        sprintf(to_log, "Réponse envoyée : %s", message, verbose);
-        logs(to_log, clientID, clientIP, verbose);
+        if (to_log) {
+            snprintf(to_log, strlen(message) + 100, "Réponse envoyée : %s", message);
+            logs(to_log, clientID, clientIP, verbose);
+            free(to_log);
+        } else {
+            perror("Failed to allocate memory for logging");
+            free(message);
+            return 0;
+        }
 
-        strcat(message, "\n");
+        // Add the newline character to the message
+        char *message_with_newline = malloc(strlen(message) + 2); // +1 for newline, +1 for null terminator
+        if (message_with_newline) {
+            snprintf(message_with_newline, strlen(message) + 2, "%s\n", message);
+            write(cnx, message_with_newline, strlen(message_with_newline));
+            free(message_with_newline);
+        } else {
+            perror("Failed to allocate memory for message with newline");
+            free(message);
+            return 0;
+        }
 
-        write(cnx, message, strlen(message));
+        free(message);
+
         return 1;
-    }
-    else
-    {
+    } else {
+        //Aucune valeur trouvé pour le code donné
         return send_answer(cnx, params, "500", clientID, clientIP, verbose);
     }
-    return 0;
 }
+
+char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose) {
+    // Convertir le rôle en chaîne de caractères
+    const char *string_role = role_to_string(role);
+
+    // Log le message
+    size_t log_len = strlen(string_role) + 100;
+    char *to_log = malloc(log_len);
+    
+    if (to_log) {
+        // Créer le log
+        snprintf(to_log, log_len, "Réponse envoyée : %s", string_role);
+        logs(to_log, clientID, clientIP, verbose);
+        
+        // Envoi du rôle
+        ssize_t bytes_sent = write(cnx, string_role, strlen(string_role));
+        
+        if (bytes_sent == -1) {
+            // Gérer l'erreur d'envoi
+            perror("Erreur lors de l'envoi du rôle");
+            free(to_log);
+            return 0;
+        }
+        
+        // Si l'envoi a réussi, on libère la mémoire allouée pour le log
+        free(to_log);
+    } else {
+        perror("Échec de l'allocation de mémoire pour le log");
+        return 0;
+    }
+    return 1;  // Rôle envoyé avec succès
+}
+
 
 void exit_on_error(PGconn *conn)
 {
@@ -241,6 +316,7 @@ int main(int argc, char *argv[])
 {
     char *param_file = ".tchatator"; // Fichier de paramètres par défaut
     int verbose = 0;
+    Role role = AUCUN;
 
     for (int i = 1; i < argc; i++)
     {
@@ -375,17 +451,30 @@ int main(int argc, char *argv[])
         buffer[len] = '\0';
         trimmed_buffer = trim_newline(buffer);
 
-        // Log the message
+        // Afficher le message reçu
         char *to_log = malloc(strlen(trimmed_buffer) + 100);
         sprintf(to_log, "Message reçu : %s", trimmed_buffer);
         logs(to_log, id_compte_client, client_ip, verbose);
 
-        if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
+        // ###############
+        // # EXTRA UTILS #
+        // ###############
+        if (strncmp(trimmed_buffer, "/role", 5) == 0)
+        {
+            logs("Commande /role", id_compte_client, client_ip, verbose);
+            send_role(cnx, role, id_compte_client, client_ip, verbose);
+        }
+
+        // ###########################
+        // # CONNEXION & DECONNEXION #
+        // ###########################
+        else if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
         {
             if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
             {
                 logs("Commande d'aide /deconnexion", id_compte_client, client_ip, verbose);
-                write(cnx, "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n", 45);
+                char *help_message = "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n";
+                write(cnx, help_message, strlen(help_message));
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
@@ -406,12 +495,18 @@ int main(int argc, char *argv[])
             else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
             {
                 char *api_key = trimmed_buffer + 11;
-                char query[256];
-                snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
+                char query[512];
 
-                PGresult *res = execute(conn, query);
+                // Essayer de se connecter en tant que membre
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db._membre WHERE api_key = '%s';", api_key);
+                PGresult *res_membre = execute(conn, query);
 
-                if (PQntuples(res) > 0)
+                // Sinon essayer de se connecter en tant que professionnel
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db._professionnel WHERE api_key = '%s';", api_key);
+                PGresult *res_pro = execute(conn, query);
+
+                // Se connecter en tant que membre ou pro
+                if (PQntuples(res_membre) > 0 || PQntuples(res_pro) > 0)
                 {
                     strcpy(id_compte_client, PQgetvalue(res, 0, 0));
 
@@ -421,38 +516,55 @@ int main(int argc, char *argv[])
                         strcpy(id_compte_client, "");
                         continue;
                     }
-
+                  
+                    if (PQntuples(res_membre) > 0) {
+                        role = MEMBRE;
+                        strcpy(id_compte_client, PQgetvalue(res_membre, 0, 0));
+                    } else {
+                        role = PRO;
+                        strcpy(id_compte_client, PQgetvalue(res_pro, 0, 0));
+                    }
+                  
                     char update_query[256];
                     snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
                     execute(conn, update_query);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
+                // Se connecter en tant qu'admin
                 else
                 {
                     char *admin_api_key = get_param(params, "admin_api_key");
                     if (strcmp(api_key, admin_api_key) == 0)
                     {
                         strcpy(id_compte_client, "admin");
+                        role = ADMIN;
                         send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     }
                     else
                     {
-                        send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     }
                 }
 
-                PQclear(res);
+                PQclear(res_membre);
+                PQclear(res_pro);
             }
+            // Aucune clé API correspondante trouvée
             else
             {
                 send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
             }
         }
+
+        // ##############
+        // # MESSAGERIE #
+        // ##############
         else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
         {
             if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
             {
-                write(cnx, "Usage: /message {id_client} {message}\nEnvoie un message au client spécifié.\n", 79);
+                char *help_message = "Usage: /message {id_compte} {message}\nEnvoie un message au compte spécifié.\n";
+                write(cnx, help_message, strlen(help_message));
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
@@ -495,8 +607,12 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
             {
-                write(cnx, "Usage: /liste {page=0}\nAffiche la liste des messages non lus.\n", 63);
+                write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
+            // Si pas connecté ou admin, aucun message non lu (no content)
+            else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0) {
+                send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
             }
             else
             {
@@ -531,7 +647,7 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
             {
-                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nModifie le message spécifié.\n", 79);
+                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié.\n", 79);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
@@ -551,11 +667,27 @@ int main(int argc, char *argv[])
                 send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
             }
         }
+
+        // ##########################
+        // # BLOCAGE & BANNISSEMENT #
+        // ##########################
         else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
         {
             if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
             {
                 write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
+            else
+            {
+                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+            }
+        }
+        else if (strncmp(trimmed_buffer, "/debloque ", 10) == 0)
+        {
+            if (strcmp(trimmed_buffer, "/debloque -h") == 0 || strcmp(trimmed_buffer, "/debloque --help") == 0)
+            {
+                write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié.\n", 57);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
             else
@@ -629,6 +761,10 @@ int main(int argc, char *argv[])
                 send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
+
+        // ###############
+        // # PARAMETRAGE #
+        // ###############
         else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
         {
             if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
@@ -636,10 +772,14 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
-            else
+            else if (strcmp(id_compte_client, "admin") == 0)
             {
                 read_param_file(params, param_file);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+            }
+            else
+            {
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
