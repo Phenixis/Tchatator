@@ -21,9 +21,9 @@ Pour les requêtes à la base de données, lors de la connexion, l'id du compte 
 - [ ] Historique des messages -> 204/NO CONTENT
 - [ ] Historique des messages -> 404/NOT FOUND
 - [ ] Historique des messages -> 416/RANGE NOT SATISFIABLE
-- [ ] Informations sur un message -> 200/OK
-- [ ] Informations sur un message -> 404/NOT FOUND
-- [ ] Informations sur un message -> 403/FORBIDDEN
+- [x] Informations sur un message -> 200/OK
+- [x] Informations sur un message -> 404/NOT FOUND
+- [x] Informations sur un message -> 403/FORBIDDEN
 - [ ] Modification d'un message -> 200/OK
 - [ ] Modification d'un message -> 404/NOT FOUND
 - [ ] Modification d'un message -> 403/FORBIDDEN
