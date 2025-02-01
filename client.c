@@ -148,60 +148,110 @@ char *trim_newline(const char *str)
     return trimmed_str;
 }
 
+// Lorsque l'on reçoit une liste des messages, il faut éviter que que le client écoute plusieurs fois (recv())
+// avec risque de blocage
+#include <sys/select.h>
+#include <sys/time.h>
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
 void messages_non_lus(int sock)
 {
     // Demander au serveur les messages non lus
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-
-    // rendre_socket_non_bloquante(sock);
-
-    char buffer[1024];
+    
+    char buffer[1024];  // Tampon pour réception
     ssize_t bytes_received;
+    char full_message[10000];  // Tampon pour accumuler le message complet
+    size_t total_received = 0; // Taille totale des données reçues
 
-    bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
-
-    // Reçu qqch (message ou 204/NO CONTENT)
-    if (bytes_received > 0)
+    // Boucle pour recevoir les messages
+    printf("\n------------------------------------------\n");
+    while (1)
     {
-        buffer[bytes_received] = '\0';
+        // Préparer l'ensemble de descripteurs pour select()
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
 
-        printf("\n---------------------\n");
-        // CAS NO CONTENT
-        if (strcmp(trim_newline(buffer), "204/NO CONTENT") == 0)
+        // Définir le timeout à 200ms
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 200000; // 200ms
+
+        // Appel select pour attendre des données ou un timeout
+        int ret = select(sock + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ret == -1)
         {
-            printf("Aucun nouveau message\n");
+            // En cas d'erreur
+            perror("Erreur de select");
+            break;
         }
-        // CAS PAS LE BON ROLE
-        else if (strcmp(trim_newline(buffer), "416/RANGE NOT SATISFIABLE") == 0)
+        else if (ret == 0)
         {
-            printf("Votre rôle actuel ne permet pas d'avoir des messages\n");
+            // Plus rien reçu dans les dernières 200ms, sortie de la boucle
+            if (total_received > 0) {
+                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0) {
+                    printf("Vous n'avez aucun nouveau message\n");
+                } else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0) {
+                    printf("Votre rôle actuel ne vous permet pas de recevoir des messages\n");
+                } else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0) {
+                    printf("Erreur du serveur lors de la lecture de vos messages");
+                }
+            }
+            break;
         }
-        // CAS INTERNAL SERVER ERROR
-        else if (strcmp(trim_newline(buffer), "500/INTERNAL SERVER ERROR") == 0)
-        {
-            printf("Le serveur a rencontré un problème lors de la récuparation des messages\n");
-        }
-        // CAS MESSAGE EFFECTIF
         else
         {
-            if (bytes_received >= 7 && strncmp(buffer, "200/OK\n", 7) == 0)
+            // Il y a des données à recevoir
+            bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytes_received > 0)
             {
-                memmove(buffer, buffer + 7, bytes_received - 7);
-                bytes_received -= 7; // Réduire la taille du message
+                buffer[bytes_received] = '\0';
+
+                // Copier les données reçues dans le tampon complet
+                if (total_received + bytes_received < sizeof(full_message)) {
+                    memcpy(full_message + total_received, buffer, bytes_received);
+                    total_received += bytes_received;
+                } else {
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    break;
+                }
+
+                // Vérifier si un message complet a été reçu (en supposant que chaque message se termine par "\n\n")
+                if (strstr(full_message, "\n\n") != NULL)
+                {
+                    // Traiter le message complet
+                    if (strncmp(full_message, "200/OK\n", 7) == 0) {
+                        memmove(full_message, full_message + 7, strlen(full_message) - 6);
+                    }
+
+                    printf("%.*s", (int)(total_received), full_message);
+
+                    // Réinitialiser les tampons pour recevoir un autre message
+                    total_received = 0;
+                    memset(full_message, 0, sizeof(full_message));
+                }
             }
-            printf("%.*s", (int)(bytes_received - 7), buffer);
+            else if (bytes_received == 0)
+            {
+                // Le serveur a fermé la connexion
+                printf("Le serveur a terminé l'envoi des messages.\n");
+                break; // Sortir de la boucle
+            }
+            else if (bytes_received == -1)
+            {
+                // Autres erreurs de réception
+                perror("Erreur de réception des données\n");
+                break; // Sortir de la boucle en cas d'erreur
+            }
         }
-        printf("---------------------\n");
     }
-    else if (bytes_received == 0)
-    {
-        printf("Le serveur a terminé l'envoi des messages.\n");
-    }
-    else if (bytes_received == -1)
-    {
-        perror("Erreur de réception des données\n");
-    }
+    printf("------------------------------------------\n");
 }
 
 void info_message(int sock)
