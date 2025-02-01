@@ -673,6 +673,11 @@ int main(int argc, char *argv[])
                         char *id_envoyeur = PQgetvalue(res, 0, 1);
                         char *id_receveur = PQgetvalue(res, 0, 2);
                         char *message = PQgetvalue(res, 0, 3);
+                        char *date_envoi = PQgetvalue(res, 0, 4);
+                        char *date_modification = PQgetvalue(res, 0, 5);
+                        char *date_lecture = PQgetvalue(res, 0, 7);
+                        char *modifie = (date_modification && strlen(date_modification) > 0) ? "oui" : "non";
+                        char *lu = (date_lecture && strlen(date_lecture) > 0) ? "oui" : "non";
 
                         // Check if the client has access to the message
                         if (strcmp(id_envoyeur, id_compte_client) != 0 && strcmp(id_receveur, id_compte_client) != 0)
@@ -681,10 +686,14 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            char *info_message = malloc(strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + 100);
+                            char *info_message = malloc(strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200);
+
                             if (info_message)
                             {
-                                snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + 100, "id_envoyeur: %s\nid_receveur: %s\nmessage: %s\n", id_envoyeur, id_receveur, message);
+                                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                                snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200,
+                                         "id_envoyeur: %s\nid_receveur: %s\nmessage: %s\nmodifie: %s\ndate_modification: %s\nlu: %s\ndate_lecture: %s\ndate_envoi: %s\n",
+                                         id_envoyeur, id_receveur, message, modifie, date_modification, lu, date_lecture, date_envoi);
                                 write(cnx, info_message, strlen(info_message));
                                 free(info_message);
                             }
@@ -693,9 +702,6 @@ int main(int argc, char *argv[])
                                 perror("Failed to allocate memory for info message");
                                 send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
                             }
-
-                            PQclear(res);
-                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                         }
                     }
                 }
