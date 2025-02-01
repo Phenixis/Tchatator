@@ -343,7 +343,7 @@ int client_est_pro(PGconn *conn, char *id_client)
 }
 
 /*
-Renvoie 0 si le client est banni, 1 ou plus sinon
+Renvoie 0 si le client n'est pas banni, 1 ou plus sinon
 */
 int client_est_banni(PGconn *conn, char *id_client)
 {
@@ -351,6 +351,19 @@ int client_est_banni(PGconn *conn, char *id_client)
     snprintf(query, sizeof(query), "SELECT * FROM sae_db._bannissement WHERE id_banni = '%s' AND (date_debannissement IS NULL OR date_debannissement > NOW());", id_client);
     PGresult *res = execute(conn, query);
     int result = PQntuples(res) > 0;
+    PQclear(res);
+    return result;
+}
+
+/*
+Renvoie 0 si le client n'est pas bloqué, 1 ou plus sinon
+*/
+int client_est_bloque(PGconn *conn, char *id_client, char *id_bloqueur)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._blocage WHERE id_bloque = '%s' AND (id_bloqueur = '%s' OR id_bloqueur = '-1');", id_client, id_bloqueur);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res);
     PQclear(res);
     return result;
 }
@@ -624,6 +637,12 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
+                    if (client_est_bloque(conn, id_compte_client, id_receveur) > 0 || client_est_bloque(conn, id_receveur, id_compte_client) > 0) // si je suis bloqué par le receveur ou si je bloque le receveur
+                    {
+                        send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
                     int taille_maxi = atoi(get_param(params, "max_message_size"));
 
                     if (strlen(message) > taille_maxi)
@@ -842,6 +861,31 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
                 {
                     write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "admin") == 0 || client_est_pro(conn, id_compte_client) > 0)
+                {
+                    char *id_client = trimmed_buffer + 8;
+                    if (client_existe(conn, id_client) == 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    if (client_est_bloque(conn, id_client, id_compte_client) > 0)
+                    {
+                        send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    char query[256];
+                    if (strcmp(id_compte_client, "admin") == 0) {
+                        snprintf(query, sizeof(query), "INSERT INTO sae_db._blocage (id_bloque, id_bloqueur) VALUES ('%s', '-1');", id_client);
+                    } else {
+                        snprintf(query, sizeof(query), "INSERT INTO sae_db._blocage (id_bloque, id_bloqueur) VALUES ('%s', '%s');", id_client, id_compte_client);
+                    }
+                    execute(conn, query);
+
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
