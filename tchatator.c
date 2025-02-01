@@ -617,8 +617,7 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    printf("id_compte_client: %s\nid_receveur: %s\n", id_compte_client, id_receveur);
-
+                    // Si receveur et envoyeur sont tous les deux des membres ou des professionnels, on refuse l'envoi
                     if ((client_est_pro(conn, id_compte_client) > 0 && client_est_pro(conn, id_receveur) > 0) || (client_est_membre(conn, id_compte_client) > 0 && client_est_membre(conn, id_receveur) > 0))
                     {
                         send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
@@ -793,6 +792,13 @@ int main(int argc, char *argv[])
                 {
                     char *id_message = strtok(trimmed_buffer + 9, " ");
                     char *nouveau_message = strtok(NULL, "");
+
+                    char *taille_maxi = get_param(params, "max_message_size");
+                    if (strlen(nouveau_message) > atoi(taille_maxi))
+                    {
+                        send_answer(cnx, params, "413", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
 
                     if (message_existe(conn, id_message) == 0)
                     {
