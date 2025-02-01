@@ -11,7 +11,6 @@
 #include <libpq-fe.h>
 #include <time.h>
 
-
 struct param
 {
     char *name;
@@ -450,115 +449,172 @@ int main(int argc, char *argv[])
     sprintf(to_log, "Listen: %d", ret);
     logs(to_log, "", "", verbose);
 
-    size = sizeof(conn_addr);
-    cnx = accept(sock, (struct sockaddr *)&conn_addr, (socklen_t *)&size);
-    if (cnx == -1)
+    int go_on = 0;
+    while (go_on == 0)
     {
-        perror("Erreur lors de l'acceptation de la connexion");
-        close(sock);
-        return 1;
-    }
-    sprintf(to_log, "Accept: %d", cnx);
-    logs(to_log, "", "", verbose);
-
-    char *client_ip = inet_ntoa(conn_addr.sin_addr);
-    PGconn *conn = get_connection(params, verbose);
-    char buffer[2048];
-    char id_compte_client[1024];
-    int len;
-    char *trimmed_buffer;
-
-    do
-    {
-        free(trimmed_buffer);
-        len = read(cnx, buffer, sizeof(buffer) - 1);
-        buffer[len] = '\0';
-        trimmed_buffer = trim_newline(buffer);
-
-        // Afficher le message reçu
-        char *to_log = malloc(strlen(trimmed_buffer) + 100);
-        sprintf(to_log, "Message reçu : %s", trimmed_buffer);
-        logs(to_log, id_compte_client, client_ip, verbose);
-
-        // ###############
-        // # EXTRA UTILS #
-        // ###############
-        if (strncmp(trimmed_buffer, "/role", 5) == 0)
+        size = sizeof(conn_addr);
+        cnx = accept(sock, (struct sockaddr *)&conn_addr, (socklen_t *)&size);
+        if (cnx == -1)
         {
-            logs("Commande /role", id_compte_client, client_ip, verbose);
-            send_role(cnx, role, id_compte_client, client_ip, verbose);
+            perror("Erreur lors de l'acceptation de la connexion");
+            close(sock);
+            return 1;
         }
+        sprintf(to_log, "Accept: %d", cnx);
+        logs(to_log, "", "", verbose);
 
-        // ###########################
-        // # CONNEXION & DECONNEXION #
-        // ###########################
-        else if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
+        char *client_ip = inet_ntoa(conn_addr.sin_addr);
+        PGconn *conn = get_connection(params, verbose);
+        char buffer[2048];
+        char id_compte_client[1024];
+        int len;
+        char *trimmed_buffer;
+
+        do
         {
-            if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
-            {
-                logs("Commande d'aide /deconnexion", id_compte_client, client_ip, verbose);
-                char *help_message = "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n";
-                write(cnx, help_message, strlen(help_message));
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
-                strcpy(id_compte_client, "");
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                break;
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
-            {
-                write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
-            {
-                char *api_key = trimmed_buffer + 11;
-                char *admin_api_key = get_param(params, "admin_api_key");
-                char query[512];
+            free(trimmed_buffer);
+            len = read(cnx, buffer, sizeof(buffer) - 1);
+            buffer[len] = '\0';
+            trimmed_buffer = trim_newline(buffer);
 
-                // Essayer de se connecter en tant que membre
-                snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
-                PGresult *res = execute(conn, query);
+            // Afficher le message reçu
+            char *to_log = malloc(strlen(trimmed_buffer) + 100);
+            sprintf(to_log, "Message reçu : %s", trimmed_buffer);
+            logs(to_log, id_compte_client, client_ip, verbose);
 
-                // Se connecter en tant que membre ou pro
-                if (PQntuples(res) > 0)
+            // ###############
+            // # EXTRA UTILS #
+            // ###############
+            if (strncmp(trimmed_buffer, "/role", 5) == 0)
+            {
+                logs("Commande /role", id_compte_client, client_ip, verbose);
+                send_role(cnx, role, id_compte_client, client_ip, verbose);
+            }
+
+            // ###########################
+            // # CONNEXION & DECONNEXION #
+            // ###########################
+            else if (strncmp(trimmed_buffer, "/deconnexion", 12) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/deconnexion -h") == 0 || strcmp(trimmed_buffer, "/deconnexion --help") == 0)
                 {
-                    strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+                    logs("Commande d'aide /deconnexion", id_compte_client, client_ip, verbose);
+                    char *help_message = "Usage: /deconnexion\nDéconnecte le client et ferme la connexion\n";
+                    write(cnx, help_message, strlen(help_message));
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
+                    strcpy(id_compte_client, "");
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                    break;
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
+                {
+                    write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
+                {
+                    char *api_key = trimmed_buffer + 11;
+                    char *admin_api_key = get_param(params, "admin_api_key");
+                    char query[512];
 
-                    if (client_est_banni(conn, id_compte_client) == 1) // Interdit de se connecter si le client est banni
+                    // Essayer de se connecter en tant que membre
+                    snprintf(query, sizeof(query), "SELECT * FROM sae_db._compte WHERE api_key = '%s';", api_key);
+                    PGresult *res = execute(conn, query);
+
+                    // Se connecter en tant que membre ou pro
+                    if (PQntuples(res) > 0)
                     {
-                        send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
-                        strcpy(id_compte_client, "");
-                        continue;
+                        strcpy(id_compte_client, PQgetvalue(res, 0, 0));
+
+                        if (client_est_banni(conn, id_compte_client) == 1) // Interdit de se connecter si le client est banni
+                        {
+                            send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                            strcpy(id_compte_client, "");
+                            continue;
+                        }
+
+                        if (client_est_membre(conn, id_compte_client) > 0)
+                        {
+                            role = MEMBRE;
+                        }
+                        else
+                        {
+                            role = PRO;
+                        }
+
+                        char update_query[256];
+                        snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
+                        execute(conn, update_query);
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+
+                        PQclear(res);
                     }
-
-                    if (client_est_membre(conn, id_compte_client) > 0)
+                    // Se connecter en tant qu'admin
+                    else if (strcmp(api_key, admin_api_key) == 0)
                     {
-                        role = MEMBRE;
+                        strcpy(id_compte_client, "admin");
+                        role = ADMIN;
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     }
                     else
                     {
-                        role = PRO;
+                        send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                    }
+                }
+                // Aucune clé API correspondante trouvée
+                else
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                }
+            }
+
+            // ##############
+            // # MESSAGERIE #
+            // ##############
+            else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
+                {
+                    char *help_message = "Usage: /message {id_compte} {message}\nEnvoie un message au compte spécifié.\n";
+                    write(cnx, help_message, strlen(help_message));
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
+                {
+                    char *id_receveur = strtok(trimmed_buffer + 9, " ");
+                    char *message = strtok(NULL, "");
+
+                    if (client_existe(conn, id_receveur) == 0 || client_est_banni(conn, id_receveur) >= 1) // Si le client est banni, on le considère comme "inexistant"
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
                     }
 
-                    char update_query[256];
-                    snprintf(update_query, sizeof(update_query), "UPDATE sae_db._compte SET derniere_connexion = NOW() WHERE id_compte = '%s';", id_compte_client);
-                    execute(conn, update_query);
-                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                    if ((client_est_pro(conn, id_compte_client) > 0 && client_est_pro(conn, id_receveur) == 0) || (client_est_membre(conn, id_compte_client) > 0 && client_est_membre(conn, id_receveur) == 0))
+                    {
+                        send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
 
-                    PQclear(res);
-                }
-                // Se connecter en tant qu'admin
-                else if (strcmp(api_key, admin_api_key) == 0)
-                {
-                    strcpy(id_compte_client, "admin");
-                    role = ADMIN;
+                    int taille_maxi = atoi(get_param(params, "max_message_size"));
+
+                    if (strlen(message) > taille_maxi)
+                    {
+                        send_answer(cnx, params, "413", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    char query[taille_maxi + 256];
+                    snprintf(query, sizeof(query), "INSERT INTO sae_db._message (id_envoyeur, id_receveur, message) VALUES ('%s', '%s', '%s');", id_compte_client, id_receveur, message);
+                    execute(conn, query);
+
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
@@ -566,376 +622,294 @@ int main(int argc, char *argv[])
                     send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
                 }
             }
-            // Aucune clé API correspondante trouvée
-            else
+            else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
             {
-                send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-            }
-        }
-
-        // ##############
-        // # MESSAGERIE #
-        // ##############
-        else if (strncmp(trimmed_buffer, "/message ", 9) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
-            {
-                char *help_message = "Usage: /message {id_compte} {message}\nEnvoie un message au compte spécifié.\n";
-                write(cnx, help_message, strlen(help_message));
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
-            {
-                char *id_receveur = strtok(trimmed_buffer + 9, " ");
-                char *message = strtok(NULL, "");
-
-                if (client_existe(conn, id_receveur) == 0 || client_est_banni(conn, id_receveur) >= 1) // Si le client est banni, on le considère comme "inexistant"
+                if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
                 {
-                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-                    continue;
+                    write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
-
-                if ((client_est_pro(conn, id_compte_client) > 0 && client_est_pro(conn, id_receveur) == 0) || (client_est_membre(conn, id_compte_client) > 0 && client_est_membre(conn, id_receveur) == 0))
+                // Si pas connecté ou admin, aucun message non lu (no content)
+                else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0)
                 {
-                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
-                    continue;
-                }
-
-                int taille_maxi = atoi(get_param(params, "max_message_size"));
-
-                if (strlen(message) > taille_maxi)
-                {
-                    send_answer(cnx, params, "413", id_compte_client, client_ip, verbose);
-                    continue;
-                }
-
-                char query[taille_maxi + 256];
-                snprintf(query, sizeof(query), "INSERT INTO sae_db._message (id_envoyeur, id_receveur, message) VALUES ('%s', '%s', '%s');", id_compte_client, id_receveur, message);
-                execute(conn, query);
-
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/liste", 6) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
-            {
-                write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            // Si pas connecté ou admin, aucun message non lu (no content)
-            else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0)
-            {
-                send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/conversation -h") == 0 || strcmp(trimmed_buffer, "/conversation --help") == 0)
-            {
-                write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
-            {
-                write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (strcmp(id_compte_client, "") != 0 && strcmp(id_compte_client, "admin") != 0)
-            {
-                if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
-                {
-                    char *id_message = trimmed_buffer + 6;
-                    char query[256];
-                    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s';", id_message);
-                    PGresult *res = execute(conn, query);
-
-                    if (PQntuples(res) == 0)
-                    {
-                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-                    }
-                    else
-                    {
-                        char *id_envoyeur = PQgetvalue(res, 0, 1);
-                        char *id_receveur = PQgetvalue(res, 0, 2);
-                        char *message = PQgetvalue(res, 0, 3);
-
-                        char *date_envoi = PQgetvalue(res, 0, 4);
-                        char *date_modification = PQgetvalue(res, 0, 5);
-                        char *date_lecture = PQgetvalue(res, 0, 7);
-                        struct tm tm;
-                        char formatted_date_envoi[30];
-                        char formatted_date_modification[30];
-                        char formatted_date_lecture[30];
-
-                        if (strptime(date_envoi, "%Y-%m-%d %H:%M:%S", &tm))
-                        {
-                            strftime(formatted_date_envoi, sizeof(formatted_date_envoi), "%H:%M:%S le %d/%m/%Y", &tm);
-                        }
-                        else
-                        {
-                            strcpy(formatted_date_envoi, "N/A");
-                        }
-
-                        if (strptime(date_modification, "%Y-%m-%d %H:%M:%S", &tm))
-                        {
-                            strftime(formatted_date_modification, sizeof(formatted_date_modification), "%H:%M:%S le %d/%m/%Y", &tm);
-                        }
-                        else
-                        {
-                            strcpy(formatted_date_modification, "N/A");
-                        }
-
-                        if (strptime(date_lecture, "%Y-%m-%d %H:%M:%S", &tm))
-                        {
-                            strftime(formatted_date_lecture, sizeof(formatted_date_lecture), "%H:%M:%S le %d/%m/%Y", &tm);
-                        }
-                        else
-                        {
-                            strcpy(formatted_date_lecture, "N/A");
-                        }
-                        
-                        char *modifie = (date_modification && strlen(date_modification) > 0) ? "oui" : "non";
-                        char *lu = (date_lecture && strlen(date_lecture) > 0) ? "oui" : "non";
-
-                        // Check if the client has access to the message
-                        if (strcmp(id_envoyeur, id_compte_client) != 0 && strcmp(id_receveur, id_compte_client) != 0)
-                        {
-                            send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
-                        }
-                        else
-                        {
-                            char *info_message = malloc(strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200);
-
-                            if (info_message)
-                            {
-                                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                                snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200,
-                                         "\"%s\", %s %s à %s.\nÉtat: %s%s, Statut: %s%s.\n",
-                                         message, 
-                                         (strcmp(id_compte_client, id_receveur) == 0) ? "Envoyé par" : "Reçu par", 
-                                         (strcmp(id_compte_client, id_receveur) == 0) ? id_envoyeur : id_receveur,
-                                         formatted_date_envoi, 
-                                         (strcmp(modifie, "oui") == 0) ? "Modifié à " : "Original", 
-                                         (strcmp(modifie, "oui") == 0) ? formatted_date_modification : "", 
-                                         (strcmp(lu, "oui") == 0) ? "Lu à " : "Envoyé", 
-                                         (strcmp(lu, "oui") == 0) ? formatted_date_lecture : "");
-                                write(cnx, info_message, strlen(info_message));
-                                free(info_message);
-                            }
-                            else
-                            {
-                                perror("Failed to allocate memory for info message");
-                                send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/modifie ", 9) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
-            {
-                write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié.\n", 79);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/supprime ", 10) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
-            {
-                write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
-            }
-        }
-
-        // ##########################
-        // # BLOCAGE & BANNISSEMENT #
-        // ##########################
-        else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
-            {
-                write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/debloque ", 10) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/debloque -h") == 0 || strcmp(trimmed_buffer, "/debloque --help") == 0)
-            {
-                write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié.\n", 57);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/ban ", 5) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/ban -h") == 0 || strcmp(trimmed_buffer, "/ban --help") == 0)
-            {
-                write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (strcmp(id_compte_client, "admin") == 0)
-            {
-                char *id_client = trimmed_buffer + 5;
-                if (client_existe(conn, id_client) == 0)
-                {
-                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-                    continue;
-                }
-
-                if (client_est_banni(conn, id_client) == 1)
-                {
-                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
-                    continue;
-                }
-
-                char query[256];
-                snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
-                execute(conn, query);
-
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/deban ", 7) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
-            {
-                write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (strcmp(id_compte_client, "admin") == 0)
-            {
-                char *id_client = trimmed_buffer + 7;
-                if (client_existe(conn, id_client) == 0)
-                {
-                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-                    continue;
-                }
-
-                if (client_est_banni(conn, id_client) == 0)
-                {
-                    send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
-                    continue;
-                }
-
-                char query[256];
-                snprintf(query, sizeof(query), "UPDATE sae_db._bannissement SET date_debannissement = NOW() WHERE id_banni = '%s' AND date_debannissement IS NULL;", id_client);
-                execute(conn, query);
-
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
-            }
-        }
-
-        // ###############
-        // # PARAMETRAGE #
-        // ###############
-        else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
-            {
-                write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (strcmp(id_compte_client, "admin") == 0)
-            {
-                read_param_file(params, param_file);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else
-            {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
-            }
-        }
-        else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
-        {
-            if (strcmp(trimmed_buffer, "/logs -h") == 0 || strcmp(trimmed_buffer, "/logs --help") == 0)
-            {
-                write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
-                send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-            }
-            else if (strcmp(id_compte_client, "admin") == 0)
-            {
-                char *nb_logs = strtok(trimmed_buffer + 6, " ");
-                if (nb_logs == NULL)
-                {
-                    nb_logs = "50";
-                }
-
-                char *log_file = get_param(params, "fichier_logs");
-                FILE *file = fopen(log_file, "r");
-                if (!file)
-                {
-                    perror("fopen failed");
-                    send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                    send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
                 }
                 else
                 {
-                    fseek(file, 0, SEEK_END);
-                    long file_size = ftell(file);
-                    fseek(file, 0, SEEK_SET);
-
-                    char *file_content = malloc(file_size + 1);
-                    fread(file_content, 1, file_size, file);
-                    file_content[file_size] = '\0';
-
-                    fclose(file);
-
-                    char *line = strtok(file_content, "\n");
-                    int line_count = 0;
-                    while (line)
+                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/conversation -h") == 0 || strcmp(trimmed_buffer, "/conversation --help") == 0)
+                {
+                    write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
+                {
+                    write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "") != 0 && strcmp(id_compte_client, "admin") != 0)
+                {
+                    if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
                     {
-                        line_count++;
-                        line = strtok(NULL, "\n");
+                        char *id_message = trimmed_buffer + 6;
+                        char query[256];
+                        snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s';", id_message);
+                        PGresult *res = execute(conn, query);
+
+                        if (PQntuples(res) == 0)
+                        {
+                            send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            char *id_envoyeur = PQgetvalue(res, 0, 1);
+                            char *id_receveur = PQgetvalue(res, 0, 2);
+                            char *message = PQgetvalue(res, 0, 3);
+
+                            char *date_envoi = PQgetvalue(res, 0, 4);
+                            char *date_modification = PQgetvalue(res, 0, 5);
+                            char *date_lecture = PQgetvalue(res, 0, 7);
+                            struct tm tm;
+                            char formatted_date_envoi[30];
+                            char formatted_date_modification[30];
+                            char formatted_date_lecture[30];
+
+                            if (strptime(date_envoi, "%Y-%m-%d %H:%M:%S", &tm))
+                            {
+                                strftime(formatted_date_envoi, sizeof(formatted_date_envoi), "%H:%M:%S le %d/%m/%Y", &tm);
+                            }
+                            else
+                            {
+                                strcpy(formatted_date_envoi, "N/A");
+                            }
+
+                            if (strptime(date_modification, "%Y-%m-%d %H:%M:%S", &tm))
+                            {
+                                strftime(formatted_date_modification, sizeof(formatted_date_modification), "%H:%M:%S le %d/%m/%Y", &tm);
+                            }
+                            else
+                            {
+                                strcpy(formatted_date_modification, "N/A");
+                            }
+
+                            if (strptime(date_lecture, "%Y-%m-%d %H:%M:%S", &tm))
+                            {
+                                strftime(formatted_date_lecture, sizeof(formatted_date_lecture), "%H:%M:%S le %d/%m/%Y", &tm);
+                            }
+                            else
+                            {
+                                strcpy(formatted_date_lecture, "N/A");
+                            }
+
+                            char *modifie = (date_modification && strlen(date_modification) > 0) ? "oui" : "non";
+                            char *lu = (date_lecture && strlen(date_lecture) > 0) ? "oui" : "non";
+
+                            // Check if the client has access to the message
+                            if (strcmp(id_envoyeur, id_compte_client) != 0 && strcmp(id_receveur, id_compte_client) != 0)
+                            {
+                                send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                            }
+                            else
+                            {
+                                char *info_message = malloc(strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200);
+
+                                if (info_message)
+                                {
+                                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                                    snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200,
+                                             "\"%s\", %s %s à %s.\nÉtat: %s%s, Statut: %s%s.\n",
+                                             message,
+                                             (strcmp(id_compte_client, id_receveur) == 0) ? "Envoyé par" : "Reçu par",
+                                             (strcmp(id_compte_client, id_receveur) == 0) ? id_envoyeur : id_receveur,
+                                             formatted_date_envoi,
+                                             (strcmp(modifie, "oui") == 0) ? "Modifié à " : "Original",
+                                             (strcmp(modifie, "oui") == 0) ? formatted_date_modification : "",
+                                             (strcmp(lu, "oui") == 0) ? "Lu à " : "Envoyé",
+                                             (strcmp(lu, "oui") == 0) ? formatted_date_lecture : "");
+                                    write(cnx, info_message, strlen(info_message));
+                                    free(info_message);
+                                }
+                                else
+                                {
+                                    perror("Failed to allocate memory for info message");
+                                    send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/modifie ", 9) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
+                {
+                    write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié.\n", 79);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/supprime ", 10) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
+                {
+                    write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                }
+            }
+
+            // ##########################
+            // # BLOCAGE & BANNISSEMENT #
+            // ##########################
+            else if (strncmp(trimmed_buffer, "/bloque ", 8) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
+                {
+                    write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/debloque ", 10) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/debloque -h") == 0 || strcmp(trimmed_buffer, "/debloque --help") == 0)
+                {
+                    write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié.\n", 57);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/ban ", 5) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/ban -h") == 0 || strcmp(trimmed_buffer, "/ban --help") == 0)
+                {
+                    write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "admin") == 0)
+                {
+                    char *id_client = trimmed_buffer + 5;
+                    if (client_existe(conn, id_client) == 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
                     }
 
-                    free(file_content);
+                    if (client_est_banni(conn, id_client) == 1)
+                    {
+                        send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
 
-                    file = fopen(log_file, "r");
+                    char query[256];
+                    snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
+                    execute(conn, query);
+
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/deban ", 7) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
+                {
+                    write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "admin") == 0)
+                {
+                    char *id_client = trimmed_buffer + 7;
+                    if (client_existe(conn, id_client) == 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    if (client_est_banni(conn, id_client) == 0)
+                    {
+                        send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    char query[256];
+                    snprintf(query, sizeof(query), "UPDATE sae_db._bannissement SET date_debannissement = NOW() WHERE id_banni = '%s' AND date_debannissement IS NULL;", id_client);
+                    execute(conn, query);
+
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                }
+            }
+
+            // ###############
+            // # PARAMETRAGE #
+            // ###############
+            else if (strncmp(trimmed_buffer, "/sync", 5) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
+                {
+                    write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "admin") == 0)
+                {
+                    read_param_file(params, param_file);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/logs", 5) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/logs -h") == 0 || strcmp(trimmed_buffer, "/logs --help") == 0)
+                {
+                    write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "admin") == 0)
+                {
+                    char *nb_logs = strtok(trimmed_buffer + 6, " ");
+                    if (nb_logs == NULL)
+                    {
+                        nb_logs = "50";
+                    }
+
+                    char *log_file = get_param(params, "fichier_logs");
+                    FILE *file = fopen(log_file, "r");
                     if (!file)
                     {
                         perror("fopen failed");
@@ -943,48 +917,90 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        file_content = malloc(file_size + 1);
+                        fseek(file, 0, SEEK_END);
+                        long file_size = ftell(file);
+                        fseek(file, 0, SEEK_SET);
+
+                        char *file_content = malloc(file_size + 1);
                         fread(file_content, 1, file_size, file);
                         file_content[file_size] = '\0';
 
                         fclose(file);
 
-                        line = strtok(file_content, "\n");
-                        int start_line = line_count - atoi(nb_logs);
-                        if (start_line < 0)
-                        {
-                            start_line = 0;
-                        }
-
-                        line_count = 0;
+                        char *line = strtok(file_content, "\n");
+                        int line_count = 0;
                         while (line)
                         {
-                            if (line_count >= start_line)
-                            {
-                                write(cnx, line, strlen(line));
-                                write(cnx, "\n", 1);
-                            }
                             line_count++;
                             line = strtok(NULL, "\n");
                         }
 
                         free(file_content);
-                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+
+                        file = fopen(log_file, "r");
+                        if (!file)
+                        {
+                            perror("fopen failed");
+                            send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            file_content = malloc(file_size + 1);
+                            fread(file_content, 1, file_size, file);
+                            file_content[file_size] = '\0';
+
+                            fclose(file);
+
+                            line = strtok(file_content, "\n");
+                            int start_line = line_count - atoi(nb_logs);
+                            if (start_line < 0)
+                            {
+                                start_line = 0;
+                            }
+
+                            line_count = 0;
+                            while (line)
+                            {
+                                if (line_count >= start_line)
+                                {
+                                    write(cnx, line, strlen(line));
+                                    write(cnx, "\n", 1);
+                                }
+                                line_count++;
+                                line = strtok(NULL, "\n");
+                            }
+
+                            free(file_content);
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        }
                     }
+                }
+                else
+                {
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                }
+            }
+            else if (strcmp(trimmed_buffer, "/quit") == 0) // Commande ADMIN pour arrêter le Tchatator
+            {
+                if (strcmp(id_compte_client, "admin") == 0)
+                {
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                    go_on = 1;
+                    break;
+                }
+                else
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose); // Si le client n'est pas admin, on fait comme si la commande n'existait pas
                 }
             }
             else
             {
-                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
             }
-        }
-        else
-        {
-            send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-        }
-    } while (len > 0);
+        } while (len > 0);
 
-    close(cnx);
+        close(cnx);
+    }
     close(sock);
 
     return 0;
