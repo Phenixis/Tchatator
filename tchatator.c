@@ -296,6 +296,26 @@ int client_existe(PGconn *conn, char *id_client)
     PQclear(res);
     return result;
 }
+/* Renvoie 0 si le message n'existe pas, 1 ou plus sinon*/
+int message_existe(PGconn *conn, char *id_message)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s';", id_message);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res);
+    PQclear(res);
+    return result;
+}
+/* Renvoie 0 si le client n'est pas l'envoyeur, 1 ou plus sinon */
+int client_est_envoyeur(PGconn *conn, char *id_client, char *id_message)
+{
+    char query[256];
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s' AND id_envoyeur = '%s';", id_message, id_client);
+    PGresult *res = execute(conn, query);
+    int result = PQntuples(res);
+    PQclear(res);
+    return result;
+}
 /*
 Renvoie 0 si le client n'est pas membre, 1 ou plus sinon
 */
@@ -761,9 +781,30 @@ int main(int argc, char *argv[])
                     write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié.\n", 79);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
+                else if (strcmp(id_compte_client, "") != 0 && strcmp(id_compte_client, "admin") != 0)
+                {
+                    char *id_message = strtok(trimmed_buffer + 9, " ");
+                    char *nouveau_message = strtok(NULL, "");
+
+                    if (message_existe(conn, id_message) == 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    if (client_est_envoyeur(conn, id_compte_client, id_message) == 0) {
+                        send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    char query[256];
+                    snprintf(query, sizeof(query), "UPDATE sae_db._message SET message = '%s', date_modification = NOW() WHERE id = '%s';", nouveau_message, id_message);
+                    execute(conn, query);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
                 else
                 {
-                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                    send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
                 }
             }
             else if (strncmp(trimmed_buffer, "/supprime ", 10) == 0)
