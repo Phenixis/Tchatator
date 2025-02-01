@@ -617,7 +617,9 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    if ((client_est_pro(conn, id_compte_client) > 0 && client_est_pro(conn, id_receveur) == 0) || (client_est_membre(conn, id_compte_client) > 0 && client_est_membre(conn, id_receveur) == 0))
+                    printf("id_compte_client: %s\nid_receveur: %s\n", id_compte_client, id_receveur);
+
+                    if ((client_est_pro(conn, id_compte_client) > 0 && client_est_pro(conn, id_receveur) > 0) || (client_est_membre(conn, id_compte_client) > 0 && client_est_membre(conn, id_receveur) > 0))
                     {
                         send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
                         continue;
@@ -742,6 +744,12 @@ int main(int argc, char *argv[])
                             }
                             else
                             {
+                                if (strcmp(id_receveur, id_compte_client) == 0 && strcmp(lu, "non") == 0)
+                                {
+                                    char update_query[256];
+                                    snprintf(update_query, sizeof(update_query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id = '%s';", id_message);
+                                    execute(conn, update_query);
+                                }
                                 char *info_message = malloc(strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200);
 
                                 if (info_message)
