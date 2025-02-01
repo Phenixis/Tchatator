@@ -42,12 +42,16 @@ const char *role_to_string(Role role)
     }
 }
 
-int is_positive_integer(const char *str) {
-    if (str == NULL || *str == '\0') {
+int is_positive_integer(const char *str)
+{
+    if (str == NULL || *str == '\0')
+    {
         return 0;
     }
-    for (int i = 0; str[i] != '\0'; i++) {
-        if (!isdigit(str[i])) {
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        if (!isdigit(str[i]))
+        {
             return 0;
         }
     }
@@ -325,9 +329,9 @@ char send_messages_non_lus(int cnx, PGresult *res, char *clientID, char *clientI
     for (i = 0; i < rows; i++)
     {
         // Récupérer les valeurs des colonnes
-        const char *mail_envoyeur = PQgetvalue(res, i, 0); // Colonne 0: mail_envoyeur
-        const char *message = PQgetvalue(res, i, 1);       // Colonne 1: message
-        const char *date_envoi = PQgetvalue(res, i, 2);    // Colonne 2: date_envoi
+        const char *mail_envoyeur = PQgetvalue(res, i, 0);
+        const char *message = PQgetvalue(res, i, 1);
+        const char *date_envoi = PQgetvalue(res, i, 2);
 
         // Vérifier que les valeurs ne sont pas NULL
         if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL)
@@ -379,6 +383,72 @@ char send_messages_non_lus(int cnx, PGresult *res, char *clientID, char *clientI
         }
     }
 
+    return 1; // Succès
+}
+
+char send_historique(int cnx, PGresult *res, char *clientID, char *clientIP, int verbose)
+{
+    int rows = PQntuples(res); // Nombre de lignes dans le résultat
+    int i;
+
+    // On parcourt chaque ligne du résultat
+    for (i = 0; i < rows; i++)
+    {
+        // Récupérer les valeurs des colonnes
+        const char *mail_envoyeur = PQgetvalue(res, i, 0);
+        const char *mail_receveur = PQgetvalue(res, i, 1);
+        const char *message = PQgetvalue(res, i, 2);
+        const char *date_envoi = PQgetvalue(res, i, 3);
+
+        // Vérifier que les valeurs ne sont pas NULL
+        if (mail_envoyeur == NULL || mail_receveur == NULL || date_envoi == NULL || message == NULL)
+        {
+            fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
+            continue;
+        }
+
+        // Formater le message à envoyer
+        char buffer[10000]; // Assurer que la taille du buffer est suffisante pour le message formaté
+        int n = snprintf(buffer, sizeof(buffer), "%s->%s\t\t%s\n%s\n\n", mail_envoyeur, mail_receveur, date_envoi, message);
+
+        // Vérifier si la taille du message dépasse la taille du buffer
+        if (n >= sizeof(buffer))
+        {
+            fprintf(stderr, "Le message est trop long pour le buffer\n");
+            return -1;
+        }
+
+        // Envoyer via la socket
+        size_t total_sent = 0;
+        ssize_t sent_bytes;
+        size_t buffer_len = strlen(buffer);
+
+        while (total_sent < buffer_len)
+        {
+            sent_bytes = write(cnx, buffer + total_sent, buffer_len - total_sent);
+            if (sent_bytes == -1)
+            {
+                perror("Erreur d'envoi sur la socket");
+                return -1; // Erreur lors de l'envoi
+            }
+            total_sent += sent_bytes; // Mettre à jour le nombre total de bytes envoyés
+        }
+        size_t log_len = strlen(buffer) + 100;
+        char *to_log = malloc(log_len);
+
+        if (to_log)
+        {
+            // Créer le log
+            snprintf(to_log, log_len, "Réponse envoyée : %s", trim_newline(buffer));
+            logs(to_log, clientID, clientIP, verbose);
+            free(to_log);
+        }
+        else
+        {
+            perror("Échec de l'allocation de mémoire pour le log");
+            return -1;
+        }
+    }
     return 1; // Succès
 }
 
@@ -736,17 +806,49 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
+            // Ni pro ni membre
+            else if (role != MEMBRE && role != PRO)
+            {
+                send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+            }
+            // Pro
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                // L'autre client spécifié n'existe pas
+                char *id_client = trimmed_buffer + 14;
+                char query[512];
+                snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
+                PGresult *res = execute(conn, query);
+                if (PQntuples(res) <= 0)
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                }
+
+                else
+                {
+                    snprintf(query, sizeof(query), "SELECT email_envoyeur, email_receveur, message, date_envoi FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s');", id_compte_client, id_client, id_client, id_compte_client);
+                    res = execute(conn, query);
+                    // N'a jamais échangé avec cet autre client
+                    if (PQntuples(res) <= 0)
+                    {
+                        send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                    }
+                    // A déjà échangé avec cet autre client
+                    else
+                    {
+                        // Tout s'est bien passé
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        send_historique(cnx, res, id_compte_client, client_ip, verbose);
+                    }
+                }
             }
         }
         else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
         {
             if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
             {
-                write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
             }
             else
             {
@@ -779,7 +881,8 @@ int main(int argc, char *argv[])
                 char query[256];
                 PGresult *res = NULL;
 
-                if (is_positive_integer(id_mesage)) {
+                if (is_positive_integer(id_mesage))
+                {
                     snprintf(query, sizeof(query), "SELECT id_envoyeur FROM sae_db._message WHERE id = '%s';", id_mesage);
                     res = execute(conn, query);
                 }
@@ -793,13 +896,16 @@ int main(int argc, char *argv[])
                         // Mettre la date de suppression à la date actuelle (si pas déjà supprimé)
                         char *id_mesage = trimmed_buffer + 10;
                         char query[256];
-                        
+
                         snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_suppression = NOW() WHERE id = '%d' AND date_suppression IS NULL;", atoi(id_mesage));
                         res = execute(conn, query);
 
-                        if (atoi(PQcmdTuples(res)) > 0) {
+                        if (atoi(PQcmdTuples(res)) > 0)
+                        {
                             send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                        } else {
+                        }
+                        else
+                        {
                             send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                         }
                     }

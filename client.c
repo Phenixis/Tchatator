@@ -255,9 +255,6 @@ void messages_non_lus(int sock)
     printf("------------------------------------------\n");
 }
 
-// ######################
-// FONCTIONS A TERMINER #
-// ######################
 void supprimer_message(int sock)
 {
     char *id_message = malloc(15 * sizeof(char));
@@ -289,6 +286,40 @@ void supprimer_message(int sock)
     free(id_message);
 }
 
+// ######################
+// FONCTIONS A TERMINER #
+// ######################
+void historique_message(int sock)
+{
+    char *id_client = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id d'un de vos clients : ");
+    scanf("%s", id_client);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /supprime
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/converation %s", id_client);
+
+    // Envoyer la requête au serveur
+    send(sock, requete, strlen(requete), 0);
+    printf("Message envoyé: %s\n", requete);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_client);
+}
+
 void info_message(int sock)
 {
     char *requete = "/liste";
@@ -296,12 +327,6 @@ void info_message(int sock)
 }
 
 void modifier_message(int sock)
-{
-    char *requete = "/liste";
-    send(sock, requete, strlen(requete), 0);
-}
-
-void historique_message(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
