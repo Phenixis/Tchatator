@@ -11,6 +11,7 @@
 #include <libpq-fe.h>
 #include <time.h>
 
+
 struct param
 {
     char *name;
@@ -673,9 +674,42 @@ int main(int argc, char *argv[])
                         char *id_envoyeur = PQgetvalue(res, 0, 1);
                         char *id_receveur = PQgetvalue(res, 0, 2);
                         char *message = PQgetvalue(res, 0, 3);
+
                         char *date_envoi = PQgetvalue(res, 0, 4);
                         char *date_modification = PQgetvalue(res, 0, 5);
                         char *date_lecture = PQgetvalue(res, 0, 7);
+                        struct tm tm;
+                        char formatted_date_envoi[30];
+                        char formatted_date_modification[30];
+                        char formatted_date_lecture[30];
+
+                        if (strptime(date_envoi, "%Y-%m-%d %H:%M:%S", &tm))
+                        {
+                            strftime(formatted_date_envoi, sizeof(formatted_date_envoi), "%H:%M:%S le %d/%m/%Y", &tm);
+                        }
+                        else
+                        {
+                            strcpy(formatted_date_envoi, "N/A");
+                        }
+
+                        if (strptime(date_modification, "%Y-%m-%d %H:%M:%S", &tm))
+                        {
+                            strftime(formatted_date_modification, sizeof(formatted_date_modification), "%H:%M:%S le %d/%m/%Y", &tm);
+                        }
+                        else
+                        {
+                            strcpy(formatted_date_modification, "N/A");
+                        }
+
+                        if (strptime(date_lecture, "%Y-%m-%d %H:%M:%S", &tm))
+                        {
+                            strftime(formatted_date_lecture, sizeof(formatted_date_lecture), "%H:%M:%S le %d/%m/%Y", &tm);
+                        }
+                        else
+                        {
+                            strcpy(formatted_date_lecture, "N/A");
+                        }
+                        
                         char *modifie = (date_modification && strlen(date_modification) > 0) ? "oui" : "non";
                         char *lu = (date_lecture && strlen(date_lecture) > 0) ? "oui" : "non";
 
@@ -692,8 +726,15 @@ int main(int argc, char *argv[])
                             {
                                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                                 snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200,
-                                         "id_envoyeur: %s\nid_receveur: %s\nmessage: %s\nmodifie: %s\ndate_modification: %s\nlu: %s\ndate_lecture: %s\ndate_envoi: %s\n",
-                                         id_envoyeur, id_receveur, message, modifie, date_modification, lu, date_lecture, date_envoi);
+                                         "\"%s\", %s %s à %s.\nÉtat: %s%s, Statut: %s%s.\n",
+                                         message, 
+                                         (strcmp(id_compte_client, id_receveur) == 0) ? "Envoyé par" : "Reçu par", 
+                                         (strcmp(id_compte_client, id_receveur) == 0) ? id_envoyeur : id_receveur,
+                                         formatted_date_envoi, 
+                                         (strcmp(modifie, "oui") == 0) ? "Modifié à " : "Original", 
+                                         (strcmp(modifie, "oui") == 0) ? formatted_date_modification : "", 
+                                         (strcmp(lu, "oui") == 0) ? "Lu à " : "Envoyé", 
+                                         (strcmp(lu, "oui") == 0) ? formatted_date_lecture : "");
                                 write(cnx, info_message, strlen(info_message));
                                 free(info_message);
                             }
