@@ -212,11 +212,49 @@ char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose) 
         free(to_log);
     } else {
         perror("Échec de l'allocation de mémoire pour le log");
-        return 0;
+        return -1;
     }
+
     return 1;  // Rôle envoyé avec succès
 }
 
+char send_messages_non_lus(int cnx, PGresult *res) {
+    int rows = PQntuples(res);  // Nombre de lignes dans le résultat
+    int i;
+    
+    // On parcourt chaque ligne du résultat
+    for (i = 0; i < rows; i++) {
+        // Récupérer les valeurs des colonnes
+        const char *mail_envoyeur = PQgetvalue(res, i, 0);  // Colonne 0: mail_envoyeur
+        const char *date_envoi = PQgetvalue(res, i, 1);      // Colonne 1: date_envoi
+        const char *message = PQgetvalue(res, i, 2);         // Colonne 2: message
+        
+        // Vérifier que les valeurs ne sont pas NULL
+        if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL) {
+            fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
+            continue;  // Passer à la prochaine ligne
+        }
+        
+        // Formater le message à envoyer
+        char buffer[1024];  // Assurer que la taille du buffer est suffisante pour le message formaté
+        int n = snprintf(buffer, sizeof(buffer), "%s\t\t%s\n%s\n", mail_envoyeur, date_envoi, message);
+
+        // Vérifier si la taille du message dépasse la taille du buffer
+        if (n >= sizeof(buffer)) {
+            fprintf(stderr, "Le message est trop long pour le buffer\n");
+            return -1;
+        }
+        
+        // Envoyer via la socket
+        ssize_t sent_bytes = write(cnx, buffer, strlen(buffer));
+        if (sent_bytes == -1) {
+            perror("Erreur d'envoi sur la socket");
+            return -1;  // Erreur lors de l'envoi
+        }
+    }
+    
+    return 1;  // Succès
+}
 
 void exit_on_error(PGconn *conn)
 {
@@ -448,6 +486,7 @@ int main(int argc, char *argv[])
             {
                 logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
                 strcpy(id_compte_client, "");
+                role = AUCUN;
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 break;
             }
@@ -536,13 +575,27 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
-            // Si pas connecté ou admin, aucun message non lu (no content)
-            else if (strcmp(id_compte_client, "") == 0 || strcmp(id_compte_client, "admin") == 0) {
+            // Si pas connecté (ou admin)
+            else if (role == AUCUN || role == ADMIN) {
                 send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
             }
-            else
-            {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+            // Si connecté
+            else {
+                // Regarder s'il y a des messages dans la boîte de messages non lus
+                char query[256];
+                snprintf(query, sizeof(query), "SELECT * FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s';", id_compte_client);
+                PGresult *res = execute(conn, query);
+
+                // Cas 1 : il y a des messages non lus dans sa boîte
+                if (PQntuples(res) > 0)
+                {
+                    send_messages_non_lus(cnx, res);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                // Cas 2 : il n'y a aucun message non lu dans sa boîte
+                else {
+                    send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                }
             }
         }
         else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
