@@ -252,7 +252,6 @@ char send_messages_non_lus(int cnx, PGresult *res) {
             return -1;  // Erreur lors de l'envoi
         }
     }
-    
     return 1;  // Succès
 }
 

@@ -110,11 +110,26 @@ void envoyer_message(int sock) {
 // FONCTIONS A TERMINER #
 // ######################
 void messages_non_lus(int sock) {
+    // Demander au serveur les messages non lus
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
 
-    close(sock);
-    exit(0);
+    // Recevoir les messages un par un du serveur
+    char buffer[1024];
+    ssize_t bytes_received;
+    
+    // Boucle pour recevoir plusieurs messages jusqu'à ce qu'il n'y en ait plus
+    while ((bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';  // Assurer que la chaîne est bien terminée
+        printf("Réponse du serveur: %s", buffer);  // Afficher le message
+    }
+
+    if (bytes_received == -1) {
+        perror("Erreur de réception");
+    }
+
+    close(sock);  // Fermer la socket
+    exit(0);  // Quitter
 }
 
 void info_message(int sock) {
