@@ -148,86 +148,59 @@ char *trim_newline(const char *str)
     return trimmed_str;
 }
 
-// Lorsque l'on reçoit une liste des messages, il faut éviter que que le client écoute plusieurs fois (recv())
-// avec risque de blocage
-void rendre_socket_non_bloquante(int sock)
-{
-    int flags = fcntl(sock, F_GETFL, 0);
-    if (flags == -1)
-    {
-        perror("Erreur lors de la récupération des flags de la socket");
-        close(sock);
-        exit(1);
-    }
-    flags |= O_NONBLOCK; // Ajout de l'option non bloquante
-    if (fcntl(sock, F_SETFL, flags) == -1)
-    {
-        perror("Erreur lors de la modification des flags de la socket");
-        close(sock);
-        exit(1);
-    }
-}
-
 void messages_non_lus(int sock)
 {
     // Demander au serveur les messages non lus
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
 
-    rendre_socket_non_bloquante(sock);
+    // rendre_socket_non_bloquante(sock);
 
     char buffer[1024];
     ssize_t bytes_received;
 
-    // Boucle pour recevoir les messages, mais sans bloquer le client avec délai de 500ms
-    while (1)
+    bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+    // Reçu qqch (message ou 204/NO CONTENT)
+    if (bytes_received > 0)
     {
-        usleep(500000); // 500ms = 500 000 micro-secondes
-        bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+        buffer[bytes_received] = '\0';
 
-        // Reçu qqch (message ou 204/NO CONTENT)
-        if (bytes_received > 0)
+        printf("\n---------------------\n");
+        // CAS NO CONTENT
+        if (strcmp(trim_newline(buffer), "204/NO CONTENT") == 0)
         {
-            buffer[bytes_received] = '\0';
-
-            printf("\n---------------------\n");
-            // CAS NO CONTENT
-            if (strcmp(trim_newline(buffer), "204/NO CONTENT") == 0)
-            {
-                printf("Aucun nouveau message\n");
-            }
-            // CAS MESSAGE EFFECTIF
-            else
-            {
-                if (bytes_received >= 7 && strcmp(&buffer[bytes_received - 7], "200/OK\n") == 0)
-                {
-                    buffer[bytes_received - 7] = '\0'; // Couper "200/OK" du message
-                }
-
-                printf("%s", buffer);
-            }
-            printf("---------------------\n");
+            printf("Aucun nouveau message\n");
         }
-        else if (bytes_received == 0)
+        // CAS PAS LE BON ROLE
+        else if (strcmp(trim_newline(buffer), "416/RANGE NOT SATISFIABLE") == 0)
         {
-            // Le serveur a fermé la connexion
-            printf("Le serveur a terminé l'envoi des messages.\n");
-            break; // Sortir de la boucle
+            printf("Votre rôle actuel ne permet pas d'avoir des messages\n");
         }
-        else if (bytes_received == -1)
+        // CAS INTERNAL SERVER ERROR
+        else if (strcmp(trim_newline(buffer), "500/INTERNAL SERVER ERROR") == 0)
         {
-            // Si errno est EAGAIN ou EWOULDBLOCK, cela signifie qu'il n'y a plus de recv() à effectuer, on a tout reçu
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-            {
-                break;
-            }
-            else
-            {
-                // Autres erreurs de réception
-                perror("Erreur de réception des données\n");
-                break; // Sortir de la boucle en cas d'erreur
-            }
+            printf("Le serveur a rencontré un problème lors de la récuparation des messages\n");
         }
+        // CAS MESSAGE EFFECTIF
+        else
+        {
+            if (bytes_received >= 7 && strncmp(buffer, "200/OK\n", 7) == 0)
+            {
+                memmove(buffer, buffer + 7, bytes_received - 7);
+                bytes_received -= 7; // Réduire la taille du message
+            }
+            printf("%.*s", (int)(bytes_received - 7), buffer);
+        }
+        printf("---------------------\n");
+    }
+    else if (bytes_received == 0)
+    {
+        printf("Le serveur a terminé l'envoi des messages.\n");
+    }
+    else if (bytes_received == -1)
+    {
+        perror("Erreur de réception des données\n");
     }
 }
 

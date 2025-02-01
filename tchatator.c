@@ -18,19 +18,27 @@ struct param
 };
 
 // Roles possibles que peut avoir le client en se connectant notamment
-typedef enum {
+typedef enum
+{
     AUCUN = 0,
     MEMBRE = 1,
     PRO = 2,
     ADMIN = 3
 } Role;
-const char* role_to_string(Role role) {
-    switch(role) {
-        case AUCUN: return "aucun";
-        case MEMBRE: return "membre";
-        case PRO: return "pro";
-        case ADMIN: return "admin";
-        default: return "unknown";
+const char *role_to_string(Role role)
+{
+    switch (role)
+    {
+    case AUCUN:
+        return "aucun";
+    case MEMBRE:
+        return "membre";
+    case PRO:
+        return "pro";
+    case ADMIN:
+        return "admin";
+    default:
+        return "unknown";
     }
 }
 
@@ -148,15 +156,18 @@ int logs(char *message, char *clientID, char *clientIP, int verbose)
 }
 
 // Assume get_param() and logs() are already defined elsewhere.
-char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose) {
+char send_answer(int cnx, struct param *params, char *code, char *clientID, char *clientIP, int verbose)
+{
     char *value = get_param(params, code);
-    
-    if (value) {
+
+    if (value)
+    {
         // Donner la bonne longueur à message
         int message_length = strlen(code) + strlen(value) + 2; // 1 pour le '/' et 1 pour '\0'
         char *message = malloc(message_length);
-        
-        if (!message) {
+
+        if (!message)
+        {
             perror("Failed to allocate memory for message");
             return 0;
         }
@@ -166,11 +177,14 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
 
         // Log le message
         char *to_log = malloc(strlen(message) + 100);
-        if (to_log) {
+        if (to_log)
+        {
             snprintf(to_log, strlen(message) + 100, "Réponse envoyée : %s", message);
             logs(to_log, clientID, clientIP, verbose);
             free(to_log);
-        } else {
+        }
+        else
+        {
             perror("Failed to allocate memory for logging");
             free(message);
             return 0;
@@ -178,11 +192,14 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
 
         // Add the newline character to the message
         char *message_with_newline = malloc(strlen(message) + 2); // +1 for newline, +1 for null terminator
-        if (message_with_newline) {
+        if (message_with_newline)
+        {
             snprintf(message_with_newline, strlen(message) + 2, "%s\n", message);
             write(cnx, message_with_newline, strlen(message_with_newline));
             free(message_with_newline);
-        } else {
+        }
+        else
+        {
             perror("Failed to allocate memory for message with newline");
             free(message);
             return 0;
@@ -191,21 +208,27 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
         free(message);
 
         return 1;
-    } else {
-        //Aucune valeur trouvé pour le code donné
+    }
+    else
+    {
+        // Aucune valeur trouvé pour le code donné
         return send_answer(cnx, params, "500", clientID, clientIP, verbose);
     }
 }
 
-char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int verbose) {
+char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int verbose)
+{
     int result;
     char query[256];
 
     snprintf(query, sizeof(query), "SELECT count FROM sae_db.vue_nb_messages_non_lus WHERE id_receveur = '%s';", clientID);
     PGresult *res = execute(conn, query);
-    if (PQntuples(res) > 0) {
+    if (PQntuples(res) > 0)
+    {
         result = atoi(PQgetvalue(res, 0, 0));
-    } else {
+    }
+    else
+    {
         result = 0;
     }
     PQclear(res);
@@ -213,100 +236,72 @@ char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int 
     // Log le message
     size_t log_len = sizeof(int) + 100;
     char *to_log = malloc(log_len);
-    
-    if (to_log) {
+
+    if (to_log)
+    {
         // Créer le log
         snprintf(to_log, log_len, "Réponse envoyée : %d", result);
         logs(to_log, clientID, clientIP, verbose);
-        
+
         // Envoi du rôle
         ssize_t bytes_sent = write(cnx, &result, sizeof(int));
-        
-        if (bytes_sent == -1) {
+
+        if (bytes_sent == -1)
+        {
             // Gérer l'erreur d'envoi
             perror("Erreur lors de l'envoi du nombre de messages non lus");
             free(to_log);
             return 0;
         }
-        
+
         // Si l'envoi a réussi, on libère la mémoire allouée pour le log
         free(to_log);
-    } else {
+    }
+    else
+    {
         perror("Échec de l'allocation de mémoire pour le log");
         return -1;
     }
 
-    return 1;  // Rôle envoyé avec succès
+    return 1; // Rôle envoyé avec succès
 }
 
-char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose) {
+char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
+{
     // Convertir le rôle en chaîne de caractères
     const char *string_role = role_to_string(role);
 
     // Log le message
     size_t log_len = strlen(string_role) + 100;
     char *to_log = malloc(log_len);
-    
-    if (to_log) {
+
+    if (to_log)
+    {
         // Créer le log
         snprintf(to_log, log_len, "Réponse envoyée : %s", string_role);
         logs(to_log, clientID, clientIP, verbose);
-        
+
         // Envoi du rôle
         ssize_t bytes_sent = write(cnx, string_role, strlen(string_role));
-        
-        if (bytes_sent == -1) {
+
+        if (bytes_sent == -1)
+        {
             // Gérer l'erreur d'envoi
             perror("Erreur lors de l'envoi du rôle");
             free(to_log);
             return 0;
         }
-        
+
         // Si l'envoi a réussi, on libère la mémoire allouée pour le log
         free(to_log);
-    } else {
+    }
+    else
+    {
         perror("Échec de l'allocation de mémoire pour le log");
         return -1;
     }
 
-    return 1;  // Rôle envoyé avec succès
-}
-
-char send_messages_non_lus(int cnx, PGresult *res) {
-    int rows = PQntuples(res);  // Nombre de lignes dans le résultat
-    int i;
-    
-    // On parcourt chaque ligne du résultat
-    for (i = 0; i < rows; i++) {
-        // Récupérer les valeurs des colonnes
-        const char *mail_envoyeur = PQgetvalue(res, i, 0);  // Colonne 0: mail_envoyeur
-        const char *message = PQgetvalue(res, i, 1);         // Colonne 2: message
-        const char *date_envoi = PQgetvalue(res, i, 2);      // Colonne 1: date_envoi
-        
-        // Vérifier que les valeurs ne sont pas NULL
-        if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL) {
-            fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
-            continue;  // Passer à la prochaine ligne
-        }
-        
-        // Formater le message à envoyer
-        char buffer[1024];  // Assurer que la taille du buffer est suffisante pour le message formaté
-        int n = snprintf(buffer, sizeof(buffer), "%s\t\t%s\n%s\n\n", mail_envoyeur, date_envoi, message);
-
-        // Vérifier si la taille du message dépasse la taille du buffer
-        if (n >= sizeof(buffer)) {
-            fprintf(stderr, "Le message est trop long pour le buffer\n");
-            return -1;
-        }
-        
-        // Envoyer via la socket
-        ssize_t sent_bytes = write(cnx, buffer, strlen(buffer));
-        if (sent_bytes == -1) {
-            perror("Erreur d'envoi sur la socket");
-            return -1;  // Erreur lors de l'envoi
-        }
-    }
-    return 1;  // Succès
+    return 1; // Rôle envoyé avec succès
 }
 
 void exit_on_error(PGconn *conn)
@@ -560,10 +555,13 @@ int main(int argc, char *argv[])
                 // Se connecter en tant que membre ou pro
                 if (PQntuples(res_membre) > 0 || PQntuples(res_pro) > 0)
                 {
-                    if (PQntuples(res_membre) > 0) {
+                    if (PQntuples(res_membre) > 0)
+                    {
                         role = MEMBRE;
                         strcpy(id_compte_client, PQgetvalue(res_membre, 0, 0));
-                    } else {
+                    }
+                    else
+                    {
                         role = PRO;
                         strcpy(id_compte_client, PQgetvalue(res_pro, 0, 0));
                     }
@@ -618,34 +616,101 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
             {
-                write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
             }
             // Si pas connecté (ou admin)
-            else if (role == AUCUN || role == ADMIN) {
-                send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+            else if (role == AUCUN || role == ADMIN)
+            {
+                send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
             }
+
             // Si connecté
-            else {
+            else
+            {
                 // Regarder s'il y a des messages dans la boîte de messages non lus
                 char query[256];
                 snprintf(query, sizeof(query), "SELECT email_envoyeur, message, date_envoi FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s';", id_compte_client);
                 PGresult *res = execute(conn, query);
+                int rows = PQntuples(res); // Nombre de lignes dans le résultat
+
+                // Allouer un buffer initial pour stocker les messages au bon format
+                size_t buffer_size = 1024; // Taille initiale du buffer
+                char *buffer = malloc(buffer_size);
+                if (buffer == NULL)
+                {
+                    perror("Erreur d'allocation mémoire");
+                }
 
                 // Cas 1 : il y a des messages non lus dans sa boîte
-                if (PQntuples(res) > 0)
+                if (rows > 0)
                 {
-                    send_messages_non_lus(cnx, res);
-                    // Marquer les messages comme lus dans la base de données
-                    char query[256];
-                    snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id_receveur = '%s' AND date_lecture IS NULL;", id_compte_client);
-                    execute(conn, query);
+                    // FORMATTER LES MESSAGES
+                    size_t offset = 0; // Position actuelle dans le buffer
+                    for (int i = 0; i < rows; i++)
+                    {
+                        // Récupérer les valeurs des colonnes
+                        const char *mail_envoyeur = PQgetvalue(res, i, 0);
+                        const char *message = PQgetvalue(res, i, 1);
+                        const char *date_envoi = PQgetvalue(res, i, 2);
 
-                    // Tout s'est bien passé
-                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        // Vérifier que les valeurs ne sont pas NULL
+                        if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL)
+                        {
+                            fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
+                            continue; // Passer à la prochaine ligne
+                        }
+
+                        // Formater le message
+                        int n = snprintf(NULL, 0, "%s\t\t%s\n%s\n\n", mail_envoyeur, date_envoi, message);
+                        if (n < 0)
+                        {
+                            fprintf(stderr, "Erreur de formatage pour le message de la ligne %d\n", i);
+                            free(buffer);
+                        }
+
+                        // Vérifier si le buffer actuel est suffisant
+                        if (offset + n + 1 > buffer_size)
+                        {
+                            buffer_size = offset + n + 1; // Réajuster la taille du buffer
+                            buffer = realloc(buffer, buffer_size);
+                            if (buffer == NULL)
+                            {
+                                perror("Erreur de réallocation mémoire");
+                            }
+                        }
+
+                        // Ajouter le message formaté dans le buffer
+                        int written = snprintf(buffer + offset, buffer_size - offset, "%s\t\t%s\n%s\n\n", mail_envoyeur, date_envoi, message);
+                        if (written < 0)
+                        {
+                            fprintf(stderr, "Erreur lors de l'ajout du message dans le buffer\n");
+                            free(buffer);
+                        }
+                        offset += written; // Mettre à jour la position dans le buffer
+                    }
+
+                    if (buffer != NULL)
+                    {
+                        // Marquer les messages comme lus dans la base de données
+                        char query[256];
+                        snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id_receveur = '%s' AND date_lecture IS NULL;", id_compte_client);
+                        execute(conn, query);
+                        
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        ssize_t sent_bytes = write(cnx, buffer, strlen(buffer));
+                        if (sent_bytes == -1) {
+                            perror("Erreur d'envoi sur la socket");
+                        }
+                    }
+                    else
+                    {
+                        send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                    }
                 }
                 // Cas 2 : il n'y a aucun message non lu dans sa boîte
-                else {
+                else
+                {
                     send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
                 }
             }
