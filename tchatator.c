@@ -348,7 +348,7 @@ Renvoie 0 si le client est banni, 1 ou plus sinon
 int client_est_banni(PGconn *conn, char *id_client)
 {
     char query[256];
-    snprintf(query, sizeof(query), "SELECT * FROM sae_db._bannissement WHERE id_banni = '%s' AND date_debannissement IS NULL;", id_client);
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._bannissement WHERE id_banni = '%s' AND (date_debannissement IS NULL OR date_debannissement > NOW());", id_client);
     PGresult *res = execute(conn, query);
     int result = PQntuples(res) > 0;
     PQclear(res);
