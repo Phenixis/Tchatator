@@ -226,8 +226,8 @@ char send_messages_non_lus(int cnx, PGresult *res) {
     for (i = 0; i < rows; i++) {
         // Récupérer les valeurs des colonnes
         const char *mail_envoyeur = PQgetvalue(res, i, 0);  // Colonne 0: mail_envoyeur
-        const char *date_envoi = PQgetvalue(res, i, 1);      // Colonne 1: date_envoi
-        const char *message = PQgetvalue(res, i, 2);         // Colonne 2: message
+        const char *message = PQgetvalue(res, i, 1);         // Colonne 2: message
+        const char *date_envoi = PQgetvalue(res, i, 2);      // Colonne 1: date_envoi
         
         // Vérifier que les valeurs ne sont pas NULL
         if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL) {
@@ -237,7 +237,7 @@ char send_messages_non_lus(int cnx, PGresult *res) {
         
         // Formater le message à envoyer
         char buffer[1024];  // Assurer que la taille du buffer est suffisante pour le message formaté
-        int n = snprintf(buffer, sizeof(buffer), "%s\t\t%s\n%s\n", mail_envoyeur, date_envoi, message);
+        int n = snprintf(buffer, sizeof(buffer), "%s\t\t%s\n%s\n\n", mail_envoyeur, date_envoi, message);
 
         // Vérifier si la taille du message dépasse la taille du buffer
         if (n >= sizeof(buffer)) {
@@ -583,13 +583,19 @@ int main(int argc, char *argv[])
             else {
                 // Regarder s'il y a des messages dans la boîte de messages non lus
                 char query[256];
-                snprintf(query, sizeof(query), "SELECT * FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s';", id_compte_client);
+                snprintf(query, sizeof(query), "SELECT email_envoyeur, message, date_envoi FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s';", id_compte_client);
                 PGresult *res = execute(conn, query);
 
                 // Cas 1 : il y a des messages non lus dans sa boîte
                 if (PQntuples(res) > 0)
                 {
                     send_messages_non_lus(cnx, res);
+                    // Marquer les messages comme lus dans la base de données
+                    char query[256];
+                    snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id_receveur = '%s' AND date_lecture IS NULL;", id_compte_client);
+                    execute(conn, query);
+
+                    // Tout s'est bien passé
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 // Cas 2 : il n'y a aucun message non lu dans sa boîte
