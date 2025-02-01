@@ -2,7 +2,7 @@
 
 ## BUGS
 
-- [ ] Aucune file d'attente n'est gérée.
+- [x] Aucune file d'attente n'est gérée.
 
 ## À FAIRE
 
