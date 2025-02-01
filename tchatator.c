@@ -219,6 +219,8 @@ char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
         snprintf(to_log, log_len, "Réponse envoyée : %s", string_role);
         logs(to_log, clientID, clientIP, verbose);
 
+        strcat(string_role, "\n");
+
         // Envoi du rôle
         ssize_t bytes_sent = write(cnx, string_role, strlen(string_role));
 
@@ -361,7 +363,7 @@ Renvoie 0 si le client n'est pas bloqué, 1 ou plus sinon
 int client_est_bloque(PGconn *conn, char *id_client, char *id_bloqueur)
 {
     char query[256];
-    snprintf(query, sizeof(query), "SELECT * FROM sae_db._blocage WHERE id_bloque = '%s' AND (id_bloqueur = '%s' OR id_bloqueur = '-1');", id_client, id_bloqueur);
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._blocage WHERE id_bloque = '%s' AND (id_bloqueur = '%s' OR id_bloqueur = '-1') AND date_deblocage > NOW();", id_client, id_bloqueur);
     PGresult *res = execute(conn, query);
     int result = PQntuples(res);
     PQclear(res);
@@ -825,7 +827,8 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    if (client_est_envoyeur(conn, id_compte_client, id_message) == 0) {
+                    if (client_est_envoyeur(conn, id_compte_client, id_message) == 0)
+                    {
                         send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
                         continue;
                     }
@@ -879,9 +882,12 @@ int main(int argc, char *argv[])
                     }
 
                     char query[256];
-                    if (strcmp(id_compte_client, "admin") == 0) {
+                    if (strcmp(id_compte_client, "admin") == 0)
+                    {
                         snprintf(query, sizeof(query), "INSERT INTO sae_db._blocage (id_bloque, id_bloqueur) VALUES ('%s', '-1');", id_client);
-                    } else {
+                    }
+                    else
+                    {
                         snprintf(query, sizeof(query), "INSERT INTO sae_db._blocage (id_bloque, id_bloqueur) VALUES ('%s', '%s');", id_client, id_compte_client);
                     }
                     execute(conn, query);
@@ -898,6 +904,48 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/debloque -h") == 0 || strcmp(trimmed_buffer, "/debloque --help") == 0)
                 {
                     write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié.\n", 57);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                else if (strcmp(id_compte_client, "admin") == 0 || client_est_pro(conn, id_compte_client) > 0)
+                {
+                    char *id_client = trimmed_buffer + 10;
+                    if (client_existe(conn, id_client) == 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    if (client_est_bloque(conn, id_client, id_compte_client) == 0)
+                    {
+                        send_answer(cnx, params, "409", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    char query[256];
+                    char *id_blocage[3];
+
+                    if (strcmp(id_compte_client, "admin") == 0) {
+                        snprintf(query, sizeof(query), "SELECT id FROM sae_db._blocage WHERE id_bloque = '%s' AND id_bloqueur = '-1' ORDER BY date_blocage DESC LIMIT 1;", id_client);
+                    } else {
+                        snprintf(query, sizeof(query), "SELECT id FROM sae_db._blocage WHERE id_bloque = '%s' AND id_bloqueur = '%s' ORDER BY date_blocage DESC LIMIT 1;", id_client, id_compte_client);
+                    }
+                    PGresult *res = execute(conn, query);
+                    if (PQntuples(res) > 0)
+                    {
+                        strcpy(id_blocage, PQgetvalue(res, 0, 0));
+                    }
+                    PQclear(res);
+
+                    if (strcmp(id_compte_client, "admin") == 0)
+                    { // mets à jour la dernière entrée de blocage
+                        snprintf(query, sizeof(query), "UPDATE sae_db._blocage SET date_deblocage = NOW() WHERE id = '%s';", id_blocage);
+                    }
+                    else
+                    {
+                        snprintf(query, sizeof(query), "UPDATE sae_db._blocage SET date_deblocage = NOW() WHERE id = '%s';", id_blocage);
+                    }
+                    execute(conn, query);
+
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
