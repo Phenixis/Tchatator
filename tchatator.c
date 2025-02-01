@@ -42,6 +42,18 @@ const char *role_to_string(Role role)
     }
 }
 
+int is_positive_integer(const char *str) {
+    if (str == NULL || *str == '\0') {
+        return 0;
+    }
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (!isdigit(str[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 char *trim_newline(const char *str)
 {
     int len = strlen(str);
@@ -757,12 +769,49 @@ int main(int argc, char *argv[])
         {
             if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
             {
-                write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
             }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                // Vérifier si le message existe
+                char *id_mesage = trimmed_buffer + 10;
+                char query[256];
+                PGresult *res = NULL;
+
+                if (is_positive_integer(id_mesage)) {
+                    snprintf(query, sizeof(query), "SELECT id_envoyeur FROM sae_db._message WHERE id = '%s';", id_mesage);
+                    res = execute(conn, query);
+                }
+
+                if (PQntuples(res) > 0)
+                {
+
+                    // Vérifier si ce message est à nous
+                    if (atoi(PQgetvalue(res, 0, 0)) == atoi(id_compte_client))
+                    {
+                        // Mettre la date de suppression à la date actuelle (si pas déjà supprimé)
+                        char *id_mesage = trimmed_buffer + 10;
+                        char query[256];
+                        
+                        snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_suppression = NOW() WHERE id = '%d' AND date_suppression IS NULL;", atoi(id_mesage));
+                        res = execute(conn, query);
+
+                        if (atoi(PQcmdTuples(res)) > 0) {
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        } else {
+                            send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        }
+                    }
+                    else
+                    {
+                        send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                    }
+                }
+                else
+                {
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                }
             }
         }
 

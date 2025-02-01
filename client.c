@@ -1,3 +1,4 @@
+#include <sys/select.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +12,8 @@
 void nettoyer_buffer()
 {
     while (getchar() != '\n')
-        ; // Consomme les caractères jusqu'au '\n'
+    {
+    }
 }
 
 void afficher_menu(int sock, char *role)
@@ -127,9 +129,6 @@ void envoyer_message(int sock)
     printf("Réponse du serveur: %s", buffer);
 }
 
-// ######################
-// FONCTIONS A TERMINER #
-// ######################
 char *trim_newline(const char *str)
 {
     int len = strlen(str);
@@ -148,21 +147,13 @@ char *trim_newline(const char *str)
     return trimmed_str;
 }
 
-// Lorsque l'on reçoit une liste des messages, il faut éviter que que le client écoute plusieurs fois (recv())
-// avec risque de blocage
-#include <sys/select.h>
-#include <sys/time.h>
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-
 void messages_non_lus(int sock)
 {
     // Demander au serveur les messages non lus
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-    
-    char buffer[1024];  // Tampon pour réception
+
+    char buffer[1024]; // Tampon pour réception
     ssize_t bytes_received;
     char full_message[10000];  // Tampon pour accumuler le message complet
     size_t total_received = 0; // Taille totale des données reçues
@@ -193,12 +184,18 @@ void messages_non_lus(int sock)
         else if (ret == 0)
         {
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
-            if (total_received > 0) {
-                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0) {
+            if (total_received > 0)
+            {
+                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                {
                     printf("Vous n'avez aucun nouveau message\n");
-                } else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0) {
+                }
+                else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
+                {
                     printf("Votre rôle actuel ne vous permet pas de recevoir des messages\n");
-                } else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0) {
+                }
+                else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
+                {
                     printf("Erreur du serveur lors de la lecture de vos messages");
                 }
             }
@@ -214,10 +211,13 @@ void messages_non_lus(int sock)
                 buffer[bytes_received] = '\0';
 
                 // Copier les données reçues dans le tampon complet
-                if (total_received + bytes_received < sizeof(full_message)) {
+                if (total_received + bytes_received < sizeof(full_message))
+                {
                     memcpy(full_message + total_received, buffer, bytes_received);
                     total_received += bytes_received;
-                } else {
+                }
+                else
+                {
                     fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
                     break;
                 }
@@ -226,7 +226,8 @@ void messages_non_lus(int sock)
                 if (strstr(full_message, "\n\n") != NULL)
                 {
                     // Traiter le message complet
-                    if (strncmp(full_message, "200/OK\n", 7) == 0) {
+                    if (strncmp(full_message, "200/OK\n", 7) == 0)
+                    {
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
@@ -254,6 +255,40 @@ void messages_non_lus(int sock)
     printf("------------------------------------------\n");
 }
 
+// ######################
+// FONCTIONS A TERMINER #
+// ######################
+void supprimer_message(int sock)
+{
+    char *id_message = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id du message : ");
+    scanf("%s", id_message);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /supprime
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/supprime %s", id_message);
+
+    // Envoyer la requête au serveur
+    send(sock, requete, strlen(requete), 0);
+    printf("Message envoyé: %s\n", requete);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_message);
+}
+
 void info_message(int sock)
 {
     char *requete = "/liste";
@@ -261,12 +296,6 @@ void info_message(int sock)
 }
 
 void modifier_message(int sock)
-{
-    char *requete = "/liste";
-    send(sock, requete, strlen(requete), 0);
-}
-
-void supprimer_message(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
