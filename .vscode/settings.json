@@ -1,5 +1,9 @@
 {
     "files.associations": {
-        "libpq-fe.h": "c"
+        "libpq-fe.h": "c",
+        "fcntl.h": "c",
+        "time.h": "c",
+        "in.h": "c",
+        "stdio.h": "c"
     }
 }

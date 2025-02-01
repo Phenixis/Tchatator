@@ -113,6 +113,18 @@ char *get_param(struct param *params, const char *name)
     exit(1);
 }
 
+PGresult *execute(PGconn *conn, char *query)
+{
+    PGresult *res = PQexec(conn, query);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        exit(EXIT_FAILURE);
+    }
+    return res;
+}
+
 int logs(char *message, char *clientID, char *clientIP, int verbose)
 {
     time_t now;
@@ -183,6 +195,48 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
         //Aucune valeur trouvé pour le code donné
         return send_answer(cnx, params, "500", clientID, clientIP, verbose);
     }
+}
+
+char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int verbose) {
+    int result;
+    char query[256];
+
+    snprintf(query, sizeof(query), "SELECT count FROM sae_db.vue_nb_messages_non_lus WHERE id_receveur = '%s';", clientID);
+    PGresult *res = execute(conn, query);
+    if (PQntuples(res) > 0) {
+        result = atoi(PQgetvalue(res, 0, 0));
+    } else {
+        result = 0;
+    }
+    PQclear(res);
+
+    // Log le message
+    size_t log_len = sizeof(int) + 100;
+    char *to_log = malloc(log_len);
+    
+    if (to_log) {
+        // Créer le log
+        snprintf(to_log, log_len, "Réponse envoyée : %d", result);
+        logs(to_log, clientID, clientIP, verbose);
+        
+        // Envoi du rôle
+        ssize_t bytes_sent = write(cnx, &result, sizeof(int));
+        
+        if (bytes_sent == -1) {
+            // Gérer l'erreur d'envoi
+            perror("Erreur lors de l'envoi du nombre de messages non lus");
+            free(to_log);
+            return 0;
+        }
+        
+        // Si l'envoi a réussi, on libère la mémoire allouée pour le log
+        free(to_log);
+    } else {
+        perror("Échec de l'allocation de mémoire pour le log");
+        return -1;
+    }
+
+    return 1;  // Rôle envoyé avec succès
 }
 
 char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose) {
@@ -284,18 +338,6 @@ PGconn *get_connection(struct param *params, int verbose)
     logs("Successfully connected to the database!", "", "", verbose);
 
     return conn;
-}
-
-PGresult *execute(PGconn *conn, char *query)
-{
-    PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
-    {
-        fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
-        PQclear(res);
-        exit(EXIT_FAILURE);
-    }
-    return res;
 }
 
 int client_existe(PGconn *conn, char *id_client)
@@ -454,8 +496,8 @@ int main(int argc, char *argv[])
 
     while (len > 0)
     {
-        char *trimmed_buffer = trim_newline(buffer);
         // Afficher le message reçu
+        char *trimmed_buffer = trim_newline(buffer);
         char *to_log = malloc(strlen(trimmed_buffer) + 100);
         sprintf(to_log, "Message reçu : %s", trimmed_buffer);
         logs(to_log, id_compte_client, client_ip, verbose);
@@ -463,7 +505,12 @@ int main(int argc, char *argv[])
         // ###############
         // # EXTRA UTILS #
         // ###############
-        if (strncmp(trimmed_buffer, "/role", 5) == 0)
+        if (strncmp(trimmed_buffer, "/nb_non_lus", 11) == 0)
+        {
+            logs("Commande /nb_non_lus", id_compte_client, client_ip, verbose);
+            send_nb_non_lus(cnx, conn, id_compte_client, client_ip, verbose);
+        }
+        else if (strncmp(trimmed_buffer, "/role", 5) == 0)
         {
             logs("Commande /role", id_compte_client, client_ip, verbose);
             send_role(cnx, role, id_compte_client, client_ip, verbose);
