@@ -770,7 +770,7 @@ int main(int argc, char *argv[])
             // Si pas connecté (ou admin)
             else if (role == AUCUN || role == ADMIN)
             {
-                send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
             }
             // Si connecté
             else
@@ -809,7 +809,7 @@ int main(int argc, char *argv[])
             // Ni pro ni membre
             else if (role != MEMBRE && role != PRO)
             {
-                send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
             }
             // Pro
             else
