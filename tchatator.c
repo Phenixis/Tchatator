@@ -655,9 +655,54 @@ int main(int argc, char *argv[])
                 write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
             }
+            else if (strcmp(id_compte_client, "") != 0 && strcmp(id_compte_client, "admin") != 0)
+            {
+                if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
+                {
+                    char *id_message = trimmed_buffer + 6;
+                    char query[256];
+                    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s';", id_message);
+                    PGresult *res = execute(conn, query);
+
+                    if (PQntuples(res) == 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    }
+                    else
+                    {
+                        char *id_envoyeur = PQgetvalue(res, 0, 1);
+                        char *id_receveur = PQgetvalue(res, 0, 2);
+                        char *message = PQgetvalue(res, 0, 3);
+
+                        // Check if the client has access to the message
+                        if (strcmp(id_envoyeur, id_compte_client) != 0 && strcmp(id_receveur, id_compte_client) != 0)
+                        {
+                            send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            char *info_message = malloc(strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + 100);
+                            if (info_message)
+                            {
+                                snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + 100, "id_envoyeur: %s\nid_receveur: %s\nmessage: %s\n", id_envoyeur, id_receveur, message);
+                                write(cnx, info_message, strlen(info_message));
+                                free(info_message);
+                            }
+                            else
+                            {
+                                perror("Failed to allocate memory for info message");
+                                send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
+                            }
+
+                            PQclear(res);
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        }
+                    }
+                }
+            }
             else
             {
-                send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
             }
         }
         else if (strncmp(trimmed_buffer, "/modifie ", 9) == 0)
