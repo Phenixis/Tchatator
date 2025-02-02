@@ -258,39 +258,6 @@ void logs(int sock)
             }
         }
     }
-
-    // if (strncmp(buffer, "200/OK", 6) == 0)
-    // {
-    //     while (len > 0)
-    //     {
-    //         len = recv(sock, buffer, sizeof(buffer), 0);
-    //         printf("%.*s", (int)len, buffer);
-    //     }
-    // }
-    // else if (strncmp(buffer, "401/UNAUTHORIZED", 16) == 0)
-    // {
-    //     printf("Erreur: Non autorisé\n");
-    // }
-    // else if (strncmp(buffer, "403/FORBIDDEN", 13) == 0)
-    // {
-    //     printf("Erreur: Accès interdit\n");
-    // }
-    // else if (strncmp(buffer, "404/NOT FOUND", 13) == 0)
-    // {
-    //     printf("Erreur: Commande non trouvée\n");
-    // }
-    // else if (strncmp(buffer, "429/TOO MANY REQUESTS", 21) == 0)
-    // {
-    //     printf("Erreur: Trop de requêtes\n");
-    // }
-    // else if (strncmp(buffer, "500/SERVER ERROR", 16) == 0)
-    // {
-    //     printf("Erreur: Erreur serveur\n");
-    // }
-    // else
-    // {
-    //     printf("Erreur inconnue: %s\n", buffer);
-    // }
 }
 
 void fermer_service(int sock)
@@ -326,7 +293,6 @@ void envoyer_message(int sock)
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
-    printf("Message envoyé: %s\n", requete);
 
     // Recevoir la réponse du serveur
     char buffer[1024];
@@ -478,7 +444,6 @@ void supprimer_message(int sock)
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
-    printf("Message envoyé: %s\n", requete);
 
     // Recevoir la réponse du serveur
     char buffer[1024];
@@ -772,50 +737,283 @@ void historique_message(int sock)
     }
 }
 
-// ######################
-// FONCTIONS A TERMINER #
-// ######################
 void info_message(int sock)
 {
-    char *requete = "/liste";
+    char id_message[50];
+
+    printf("Entrez l'identifiant du message : ");
+    fgets(id_message, sizeof(id_message), stdin);
+    id_message[strcspn(id_message, "\n")] = 0; // Supprimer le newline à la fin de l'identifiant
+
+    // Construire la requête /info
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/info %s", id_message);
+
+    // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    buffer[len] = '\0';
+    printf("Réponse du serveur: %s", buffer);
+
+    ssize_t bytes_received;
+    char full_message[10000];  // Tampon pour accumuler le message complet
+    size_t total_received = 0; // Taille totale des données reçues
+
+    while (1)
+    {
+        // Préparer l'ensemble de descripteurs pour select()
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+
+        // Définir le timeout à 200ms
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 200000; // 200ms
+
+        // Appel select pour attendre des données ou un timeout
+        int ret = select(sock + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ret == -1)
+        {
+            // En cas d'erreur
+            perror("Erreur de select");
+            break;
+        }
+        else if (ret == 0)
+        {
+            // Plus rien reçu dans les dernières 200ms, sortie de la boucle
+            if (total_received > 0)
+            {
+                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                {
+                    printf("Vous n'avez aucun nouveau message\n");
+                }
+                else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
+                {
+                    printf("Votre rôle actuel ne vous permet pas d'avoir des messages\n");
+                }
+                else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
+                {
+                    printf("La page que vous demandez n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
+                {
+                    printf("Erreur du serveur lors de la lecture de vos messages");
+                }
+            }
+            break;
+        }
+        else
+        {
+            // Il y a des données à recevoir
+            bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytes_received > 0)
+            {
+                buffer[bytes_received] = '\0';
+
+                // Copier les données reçues dans le tampon complet
+                if (total_received + bytes_received < sizeof(full_message))
+                {
+                    memcpy(full_message + total_received, buffer, bytes_received);
+                    total_received += bytes_received;
+                }
+                else
+                {
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    break;
+                }
+
+                // Vérifier si un message complet a été reçu (en supposant que chaque message se termine par "\n\n")
+                if (strstr(full_message, "\n") != NULL)
+                {
+                    // Traiter le message complet
+                    if (strncmp(full_message, "200/OK\n", 7) == 0)
+                    {
+                        memmove(full_message, full_message + 7, strlen(full_message) - 6);
+                    }
+
+                    printf("%.*s", (int)(total_received), full_message);
+
+                    // Réinitialiser les tampons pour recevoir un autre message
+                    total_received = 0;
+                    memset(full_message, 0, sizeof(full_message));
+                }
+            }
+            else if (bytes_received == 0)
+            {
+                // Le serveur a fermé la connexion
+                printf("Le serveur a clos la connexion.\n");
+                break;
+            }
+            else if (bytes_received == -1)
+            {
+                // Autres erreurs de réception
+                perror("Erreur de réception des données\n");
+                break; // Sortir de la boucle en cas d'erreur
+            }
+        }
+    }
 }
 
 void modifier_message(int sock)
 {
-    char *requete = "/liste";
+    char *id_message = malloc(15 * sizeof(char));
+    char message[1024];
+
+    printf("Entrez l'id du message : ");
+    scanf("%s", id_message);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    printf("Entrez le nouveau message : ");
+    fgets(message, sizeof(message), stdin);
+    message[strcspn(message, "\n")] = 0; // Supprimer le newline à la fin du message
+
+    // Construire la requête /modifie
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/modifie %s %s", id_message, message);
+
+    // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_message);
 }
 
 void bloquer_client(int sock)
 {
-    char *requete = "/liste";
+    char *id_client = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id du client : ");
+    scanf("%s", id_client);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /bloque
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/bloque %s", id_client);
+
+    // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
 
-    close(sock);
-    exit(0);
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_client);
 }
 
 void enlever_blocage(int sock)
 {
-    char *requete = "/liste";
+    char *id_client = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id du client : ");
+    scanf("%s", id_client);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /debloque
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/debloque %s", id_client);
+
+    // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_client);
 }
 
 void bannir_client(int sock)
 {
-    char *requete = "/liste";
+    char *id_client = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id du client : ");
+    scanf("%s", id_client);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /ban
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/ban %s", id_client);
+
+    // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_client);
 }
 
 void enlever_ban(int sock)
 {
-    char *requete = "/liste";
+    char *id_client = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id du client : ");
+    scanf("%s", id_client);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /deban
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/deban %s", id_client);
+
+    // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_client);
 }
-// #######################
-// /FONCTIONS A TERMINER #
-// #######################
 
 // Traitement de la commande de l'utilisateur (avec vérification de rôle)
 void traiter_commande(int choix, int sock, char *role)
