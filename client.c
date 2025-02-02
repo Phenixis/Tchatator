@@ -36,16 +36,19 @@ char *trim_newline(const char *str)
 /*
 Retourne 1 si un code spécifique a été détecté et un message ad hoc affiché
 */
-int code_to_message(char* code_message) {
+int code_to_message(char *code_message)
+{
     int returned = 1;
-    if (strcmp(trim_newline(code_message), "429/TOO MANY REQUESTS MINUTE") == 0)
-    {
-        printf("Vous avez envoyé trop de requêtes dans la même minute. Patientez.\n");
-    }
-    else if (strcmp(trim_newline(code_message), "430/TOO MANY REQUESTS HOUR") == 0)
+    if (strcmp(trim_newline(code_message), "430/TOO MANY REQUESTS HOUR") == 0)
     {
         printf("Vous avez envoyé trop de requêtes dans la même heure. Revenez ultérieurement.\n");
-    } else {
+    }
+    else if (strcmp(trim_newline(code_message), "429/TOO MANY REQUESTS MINUTE") == 0)
+    {
+        printf("Vous avez envoyé trop de requêtes dans la même minute. Veuillez patientez.\n");
+    }
+    else
+    {
         returned = 0;
     }
     return returned;
@@ -143,9 +146,18 @@ void connexion(int sock)
 
     // Recevoir la réponse du serveur
     char buffer[1024];
-    recv(sock, buffer, sizeof(buffer), 0);
-    if (!code_to_message(buffer) && (buffer, "200/OK") == 0) {
-        printf("Connecté\n");
+    int bytes_received = recv(sock, buffer, sizeof(buffer), 0);
+    buffer[bytes_received] = '\0';
+    if (!code_to_message(buffer))
+    {
+        if (strcmp(buffer, "200/OK") == 0)
+        {
+            printf("Connecté\n");
+        }
+        else if (strcmp(buffer, "404/NOT FOUND"))
+        {
+            printf("Cette clé API n'existe pas\n");
+        }
     }
 
     free(api_key); // Ne pas oublier de libérer la mémoire allouée pour api_key
@@ -176,7 +188,7 @@ void logs(int sock)
 {
     int nb_logs;
     char input[10];
-    printf("Nombre de logs (facultatif, par défaut à 50) : ");    
+    printf("Nombre de logs (facultatif, par défaut à 50) : ");
     if (fgets(input, sizeof(input), stdin) != NULL)
     {
         // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
@@ -270,7 +282,8 @@ void logs(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    if (!code_to_message(full_message)) {
+                    if (!code_to_message(full_message))
+                    {
                         printf("%.*s", (int)(total_received), full_message);
                     }
 
@@ -332,7 +345,8 @@ void envoyer_message(int sock)
     // Recevoir la réponse du serveur
     char buffer[1024];
     recv(sock, buffer, sizeof(buffer), 0);
-    if (!code_to_message(buffer)) {
+    if (!code_to_message(buffer))
+    {
         printf("%s", buffer);
     }
 }
@@ -406,14 +420,6 @@ void messages_non_lus(int sock)
                 {
                     printf("La page que vous demandez n'existe pas\n");
                 }
-                else if (strcmp(trim_newline(full_message), "429/TOO MANY REQUESTS MINUTE") == 0)
-                {
-                    printf("Vous avez envoyé trop de requêtes dans la même minute. Patientez.\n");
-                }
-                else if (strcmp(trim_newline(full_message), "430/TOO MANY REQUESTS HOUR") == 0)
-                {
-                    printf("Vous avez envoyé trop de requêtes dans la même heure. Revenez ultérieurement.\n");
-                }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
                     printf("Erreur du serveur lors de la lecture de vos messages");
@@ -451,7 +457,8 @@ void messages_non_lus(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    if (!code_to_message(full_message)) {
+                    if (!code_to_message(full_message))
+                    {
                         printf("%.*s", (int)(total_received), full_message);
                     }
 
@@ -496,7 +503,8 @@ void supprimer_message(int sock)
     char buffer[1024];
     int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
     buffer[recv_bytes] = '\0';
-    if (!code_to_message(buffer)) {
+    if (!code_to_message(buffer))
+    {
         printf("%s", buffer);
     }
     free(id_message);
@@ -603,7 +611,8 @@ void x_messages_precedents(int sock, char *id_client)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    if (!code_to_message(full_message)) {
+                    if (!code_to_message(full_message))
+                    {
                         peut_naviguer = 1;
                         printf("%.*s", (int)(total_received), full_message);
                     }
@@ -751,7 +760,8 @@ void historique_message(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    if (!code_to_message(full_message)) {
+                    if (!code_to_message(full_message))
+                    {
                         peut_naviguer = 1;
                         printf("%.*s", (int)(total_received), full_message);
                     }
@@ -882,7 +892,8 @@ void info_message(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    if(!code_to_message(full_message)) {
+                    if (!code_to_message(full_message))
+                    {
                         printf("%.*s", (int)(total_received), full_message);
                     }
 
@@ -933,7 +944,8 @@ void modifier_message(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        if (!code_to_message(buffer)) {
+        if (!code_to_message(buffer))
+        {
             printf("Réponse du serveur: %s", buffer);
         }
     }
@@ -965,7 +977,8 @@ void bloquer_client(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        if (!code_to_message(buffer)) {
+        if (!code_to_message(buffer))
+        {
             printf("Réponse du serveur: %s", buffer);
         }
     }
@@ -997,7 +1010,8 @@ void enlever_blocage(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        if (!code_to_message(buffer)) {
+        if (!code_to_message(buffer))
+        {
             printf("Réponse du serveur: %s", buffer);
         }
     }
@@ -1029,7 +1043,8 @@ void bannir_client(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        if (!code_to_message(buffer)) {
+        if (!code_to_message(buffer))
+        {
             printf("Réponse du serveur: %s", buffer);
         }
     }
@@ -1061,7 +1076,8 @@ void enlever_ban(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        if (!code_to_message(buffer)) {
+        if (!code_to_message(buffer))
+        {
             printf("Réponse du serveur: %s", buffer);
         }
     }

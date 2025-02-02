@@ -56,7 +56,7 @@ Si vous n'utilisez pas directement ```client.c```, vous pouvez profiter d'une mu
 | Commande                          | Commentaire                               | Qui ?          |
 |-----------------------------------|-------------------------------------------|---------------|
 | /message {id_compte} {message}    | Envoie un message au compte renseigné | Tous          |
-| /liste                             | Affiche la liste de vos messages non llus | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
+| /liste {?page=0}                            | Affiche la page avec le numéro indiqué de vos messages non lus. | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 | /info {id_message}       | Affiche les informations du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 | /modifie {id_message} {nouveau_message}       | Remplace le contenu du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 | /supprime {id_message} | Supprime un de vos messages | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
@@ -75,3 +75,10 @@ Si vous n'utilisez pas directement ```client.c```, vous pouvez profiter d'une mu
 |----------|--------------------------------------------|---------------|
 | /sync    | Recharge le fichier de synchronisation | <span class="role admin">Admin</span> |
 | /logs    | Affiche les logs dans le fichier logs               | <span class="role admin">Admin</span> |
+
+## Indications
+Un nombre limite de requêtes est accepté dans la même minute et la même heure. Ces limites son configurables dans le fichier ```.tchatator```.
+
+Le nombre de messages affichées au sein d'une même page est configurable dans le fichier ```.tchatator```
+
+Si vous n'indiquez aucune page lors de l'affichage d'un grand nombre de message, la page par défaut est 0.

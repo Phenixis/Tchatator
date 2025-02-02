@@ -793,8 +793,10 @@ int main(int argc, char *argv[])
 
         do
         {
+            printf("Compteurs : %d et %d alors que %d et %d\n", compteur_minute, compteur_heure, limite_minute, limite_heure);
             free(trimmed_buffer);
             len = read(cnx, buffer, sizeof(buffer) - 1);
+            printf("Reçu : %s\n", buffer);
             buffer[len] = '\0';
             trimmed_buffer = trim_newline(buffer);
 
@@ -814,11 +816,15 @@ int main(int argc, char *argv[])
             {
                 logs("Commande /nb_non_lus", id_compte_client, client_ip, verbose);
                 send_nb_non_lus(cnx, conn, id_compte_client, client_ip, verbose);
+                compteur_minute --;
+                compteur_heure --;
             }
             else if (strncmp(trimmed_buffer, "/role", 5) == 0)
             {
                 logs("Commande /role", id_compte_client, client_ip, verbose);
                 send_role(cnx, role, id_compte_client, client_ip, verbose);
+                compteur_minute --;
+                compteur_heure --;
             }
 
             // ###########################
@@ -862,13 +868,13 @@ int main(int argc, char *argv[])
                 sprintf(to_log, "Limite de requêtes dépassée à la minute ! [%d]", limite_minute);
                 logs(to_log, id_compte_client, client_ip, verbose);
                 send_answer(cnx, params, "429", id_compte_client, client_ip, verbose);
-                continue;;
+                continue;
             }
             else if (compteur_heure > limite_heure) {
                 sprintf(to_log, "Limite de requêtes dépassée à l'heure ! [%d]", limite_heure);
                 logs(to_log, id_compte_client, client_ip, verbose);
                 send_answer(cnx, params, "430", id_compte_client, client_ip, verbose);
-                continue;;
+                continue;
             }
             else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
             {
