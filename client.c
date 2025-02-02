@@ -15,36 +15,49 @@ void nettoyer_buffer(void)
     fgets(buffer, sizeof(buffer), stdin); // Lire et ignorer toute la ligne restante
 }
 
-void afficher_menu(int sock, char *role)
+void afficher_menu(char *role)
 {
-    printf("\n=== Menu ===\n");
-    printf("1.  Me connecter\n");
-    printf("2.  Envoyer un message\n");
-    printf("3.  Me déconnecter et quitter\n");
-
-    // Si connecté
-    if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
+    // Si membre
+    if (strcmp(role, "membre") == 0)
     {
-        // Connaître le nombre de messages non lus
-        char *requete = "/nb_non_lus";
-        int nb_non_lus = 0;
-        send(sock, requete, strlen(requete), 0);
-        recv(sock, &nb_non_lus, sizeof(int), 0);
-
-        printf("4.  Messages non lus (%d)\n", nb_non_lus);
-        printf("5.  Informations concernant un de mes messages\n");
-        printf("6.  Modifier un de mes messages\n");
-        printf("7.  Supprimer un de mes messages\n");
-        printf("8.  Historique des messages avec un autre client\n");
+        printf("\n=== Menu ===\n");
+        printf("1. Envoyer un message\n");
+        printf("2. Messages non lus\n");
+        printf("3. Informations concernant un de mes messages\n");
+        printf("4. Modifier un de mes messages\n");
+        printf("5. Supprimer un de mes messages\n");
+        printf("6. Historique des messages avec un client\n");
+        printf("7. Me déconnecter et quitter\n");
     }
-
-    // Si pro
-    if (strcmp(role, "pro") == 0)
+    else if (strcmp(role, "pro") == 0)
     {
-        printf("9.  Bloquer un client 24h\n");
-        printf("10  Lever le blocage d'un client 24h\n");
-        printf("11. Bannir un client définitivement\n");
-        printf("12. Lever le ban d'un client\n");
+        printf("\n=== Menu ===\n");
+        printf("1. Envoyer un message\n");
+        printf("2. Messages non lus\n");
+        printf("3. Informations concernant un de mes messages\n");
+        printf("4. Modifier un de mes messages\n");
+        printf("5. Supprimer un de mes messages\n");
+        printf("6. Historique des messages avec un client\n");
+        printf("7. Bloquer un client 24h\n");
+        printf("8. Lever le blocage d'un client\n");
+        printf("9. Me déconnecter et quitter\n");
+    }
+    else if (strcmp(role, "admin") == 0)
+    {
+        printf("\n=== Menu ===\n");
+        printf("1. Bloquer un client 24h\n");
+        printf("2. Lever le blocage d'un client\n");
+        printf("3. Bannir un client définitivement\n");
+        printf("4. Lever le ban d'un client\n");
+        printf("5. Synchroniser les paramètres\n");
+        printf("6. Afficher les logs\n");
+        printf("7. Me déconnecter et quitter\n");
+    }
+    else
+    {
+        printf("\n=== Menu ===\n");
+        printf("1. Me connecter\n");
+        printf("2. Quitter\n");
     }
 
     printf("Choisissez une option: ");
@@ -307,7 +320,8 @@ void supprimer_message(int sock)
     free(id_message);
 }
 
-void x_messages_precedents(int sock, char *id_client) {
+void x_messages_precedents(int sock, char *id_client)
+{
     int peut_naviguer;
     char buffer[1024];
     char *id_message = malloc(15 * sizeof(char));
@@ -316,7 +330,8 @@ void x_messages_precedents(int sock, char *id_client) {
     scanf("%s", id_message);
     getchar(); // Pour consommer le newline laissé par scanf
 
-    if (strcmp(id_message, "q") == 0) {
+    if (strcmp(id_message, "q") == 0)
+    {
         return;
     }
 
@@ -430,7 +445,8 @@ void x_messages_precedents(int sock, char *id_client) {
     }
     printf("------------------------------------------\n");
 
-    if (peut_naviguer) {
+    if (peut_naviguer)
+    {
         x_messages_precedents(sock, id_client);
     }
 }
@@ -575,7 +591,8 @@ void historique_message(int sock)
     }
     printf("------------------------------------------\n");
 
-    if (peut_naviguer) {
+    if (peut_naviguer)
+    {
         x_messages_precedents(sock, id_client);
     }
 }
@@ -786,7 +803,6 @@ int main(int argc, char *argv[])
 
     int choix;
     char role[20] = "aucun";
-    char buffer[10];
 
     // Boucle principale pour afficher le menu et traiter les options
     while (1)
