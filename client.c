@@ -307,7 +307,7 @@ void supprimer_message(int sock)
     free(id_message);
 }
 
-void x_messages_precedents(int sock, ) {
+void x_messages_precedents(int sock, char *id_client) {
     char *id_message = malloc(15 * sizeof(char));
     printf("(Tapez 'q' pour quitter la navigation)\n");
     printf("Entrez l'id du message dont vous souhaitez voir les messages précédents : ");
@@ -319,7 +319,7 @@ void x_messages_precedents(int sock, ) {
     int randNum = rand();
     // Check if the number is less than half of RAND_MAX
     if (randNum % 2 == 0) {
-        x_messages_precedents();
+        x_messages_precedents(sock, id_client);
     }
 }
 
@@ -464,7 +464,7 @@ void historique_message(int sock)
     printf("------------------------------------------\n");
 
     if (peut_naviguer) {
-        x_messages_precedents();
+        x_messages_precedents(sock, id_client);
     }
 }
 

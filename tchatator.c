@@ -498,18 +498,6 @@ PGconn *get_connection(struct param *params, int verbose)
     return conn;
 }
 
-PGresult *execute(PGconn *conn, char *query)
-{
-    PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) == PGRES_FATAL_ERROR)
-    {
-        fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
-        PQclear(res);
-        exit(EXIT_FAILURE);
-    }
-    return res;
-}
-
 /*
 Renvoie 0 si le client n'existe pas, 1 ou plus sinon
 */
@@ -726,7 +714,7 @@ int main(int argc, char *argv[])
         char *client_ip = inet_ntoa(conn_addr.sin_addr);
         PGconn *conn = get_connection(params, verbose);
         char buffer[2048];
-        char id_compte_client[1024];
+        char id_compte_client[50];
         int len;
         char *trimmed_buffer;
 
@@ -995,7 +983,7 @@ int main(int argc, char *argv[])
                         strcpy(id_client, id_client_start);
                     }
                     
-                    char query[512];
+                    char query[2048];
                     snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
                     PGresult *res = execute(conn, query);
                     if (PQntuples(res) <= 0)
@@ -1283,7 +1271,7 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    char query[256];
+                    char query[2048];
                     if (strcmp(id_compte_client, "admin") == 0)
                     {
                         snprintf(query, sizeof(query), "INSERT INTO sae_db._blocage (id_bloque, id_bloqueur) VALUES ('%s', '-1');", id_client);
@@ -1328,8 +1316,8 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    char query[256];
-                    char *id_blocage[3];
+                    char query[2048];
+                    char id_blocage[3];
 
                     if (strcmp(id_compte_client, "admin") == 0)
                     {
