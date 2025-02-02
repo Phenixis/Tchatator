@@ -22,7 +22,7 @@ Il est ici utilisé dans le cadre du site TripEnArmor et travaille avec le modè
 
 Il y a 3 rôles dans la communication avec Tchatator :
 - Le <span class="role client">client</span> *(connecté ou non)*, pouvant envoyer des messages au professionnel
-- Le <span class="role pro">professionnel</span>, pouvant communiquer avec ses potentiels clients et les bloquer / bannir
+- Le <span class="role pro">professionnel</span>, pouvant communiquer avec ses potentiels clients et les bloquer
 - L'<span class="role admin">administrateur</span>, pouvant bloquer, banir, ou lever n'importe quelle de ces contraintes
 
 ## Utilisation (en local)
@@ -60,12 +60,13 @@ Si vous n'utilisez pas directement ```client.c```, vous pouvez profiter d'une mu
 | /info {id_message}       | Affiche les informations du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 | /modifie {id_message} {nouveau_message}       | Remplace le contenu du message spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 | /supprime {id_message} | Supprime un de vos messages | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
-| /conversation {id_client} {?page=0} | Affiche l'historique des messages avec le client spécifié | <span class="role pro">Pro</span> |
+| /conversation {id_client} {?page=0} | Affiche l'historique des messages avec le client spécifié | <span class="role client">Client</span>, <span class="role pro">Pro</span> |
 
 #### Bannissement
 | Commande     | Commentaire                                 | Qui ?          |
 |--------------|---------------------------------------------|---------------|
 | /bloque {id_client} | Bloque un client pendant 24h                       | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
+| /debloque {id_client} | Débloque un Client                       | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
 | /ban {id_client}    | Bannit un client définitivement                          | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
 | /deban {id_client}  | Lève le bannissement d'un client                         | <span class="role pro">Pro</span>, <span class="role admin">Admin</span> |
 
