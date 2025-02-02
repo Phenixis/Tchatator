@@ -308,17 +308,129 @@ void supprimer_message(int sock)
 }
 
 void x_messages_precedents(int sock, char *id_client) {
+    int peut_naviguer;
+    char buffer[1024];
     char *id_message = malloc(15 * sizeof(char));
     printf("(Tapez 'q' pour quitter la navigation)\n");
     printf("Entrez l'id du message dont vous souhaitez voir les messages précédents : ");
     scanf("%s", id_message);
     getchar(); // Pour consommer le newline laissé par scanf
 
-    // 1/2 chance de recommencer
-    srand(time(NULL));
-    int randNum = rand();
-    // Check if the number is less than half of RAND_MAX
-    if (randNum % 2 == 0) {
+    if (strcmp(id_message, "q") == 0) {
+        return;
+    }
+
+    // Envoyer la requête au serveur
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/precedent %s %s", id_client, id_message);
+    send(sock, requete, strlen(requete), 0);
+
+    ssize_t bytes_received;
+    char full_message[10000];  // Tampon pour accumuler le message complet
+    size_t total_received = 0; // Taille totale des données reçues
+
+    // Boucle pour recevoir les messages
+    printf("\n------------------------------------------\n");
+    while (1)
+    {
+        // Préparer l'ensemble de descripteurs pour select()
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+
+        // Définir le timeout à 200ms
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 200000; // 200ms
+
+        // Appel select pour attendre des données ou un timeout
+        int ret = select(sock + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ret == -1)
+        {
+            // En cas d'erreur
+            perror("Erreur de select");
+            break;
+        }
+        else if (ret == 0)
+        {
+            // Plus rien reçu dans les dernières 200ms, sortie de la boucle
+            if (total_received > 0)
+            {
+                if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
+                {
+                    printf("Ce le client ou message spécifié n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                {
+                    printf("Vous n'avez plus de message précédent\n");
+                }
+                else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
+                {
+                    printf("Votre rôle actuel ne vous permet pas d'avoir des messages\n");
+                }
+                else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
+                {
+                    printf("Erreur du serveur lors de la lecture de vos messages");
+                }
+            }
+            break;
+        }
+        else
+        {
+            // Il y a des messages à afficher
+            bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytes_received > 0)
+            {
+                buffer[bytes_received] = '\0';
+
+                // Copier les données reçues dans le tampon complet
+                if (total_received + bytes_received < sizeof(full_message))
+                {
+                    memcpy(full_message + total_received, buffer, bytes_received);
+                    total_received += bytes_received;
+                }
+                else
+                {
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    break;
+                }
+
+                // Vérifier si un message complet a été reçu (en supposant que chaque message se termine par "\n\n")
+                if (strstr(full_message, "\n\n") != NULL)
+                {
+                    // Traiter le message complet
+                    if (strncmp(full_message, "200/OK\n", 7) == 0)
+                    {
+                        memmove(full_message, full_message + 7, strlen(full_message) - 6);
+                    }
+
+                    peut_naviguer = 1;
+                    printf("%.*s", (int)(total_received), full_message);
+
+                    // Réinitialiser les tampons pour recevoir un autre message
+                    total_received = 0;
+                    memset(full_message, 0, sizeof(full_message));
+                }
+            }
+            else if (bytes_received == 0)
+            {
+                // Le serveur a fermé la connexion
+                printf("Le serveur est clos.\n");
+                break; // Sortir de la boucle
+            }
+            else if (bytes_received == -1)
+            {
+                // Autres erreurs de réception
+                perror("Erreur de réception des données\n");
+                break; // Sortir de la boucle en cas d'erreur
+            }
+        }
+    }
+    printf("------------------------------------------\n");
+
+    if (peut_naviguer) {
         x_messages_precedents(sock, id_client);
     }
 }
@@ -450,7 +562,7 @@ void historique_message(int sock)
             else if (bytes_received == 0)
             {
                 // Le serveur a fermé la connexion
-                printf("Le serveur a terminé l'envoi des messages.\n");
+                printf("Le serveur est clos.n");
                 break; // Sortir de la boucle
             }
             else if (bytes_received == -1)
@@ -674,7 +786,6 @@ int main(int argc, char *argv[])
 
     int choix;
     char role[20] = "aucun";
-    char buffer[10];
 
     // Boucle principale pour afficher le menu et traiter les options
     while (1)

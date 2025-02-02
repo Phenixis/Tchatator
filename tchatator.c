@@ -410,13 +410,14 @@ char send_historique(int cnx, PGresult *res, char *clientID, char *clientIP, int
     for (i = 0; i < rows; i++)
     {
         // Récupérer les valeurs des colonnes
-        const char *mail_envoyeur = PQgetvalue(res, i, 0);
-        const char *mail_receveur = PQgetvalue(res, i, 1);
-        const char *message = PQgetvalue(res, i, 2);
-        const char *date_envoi = PQgetvalue(res, i, 3);
+        const char *id_message = PQgetvalue(res, i, 0);
+        const char *mail_envoyeur = PQgetvalue(res, i, 1);
+        const char *mail_receveur = PQgetvalue(res, i, 2);
+        const char *message = PQgetvalue(res, i, 3);
+        const char *date_envoi = PQgetvalue(res, i, 4);
 
         // Vérifier que les valeurs ne sont pas NULL
-        if (mail_envoyeur == NULL || mail_receveur == NULL || date_envoi == NULL || message == NULL)
+        if (id_message == NULL || mail_envoyeur == NULL || mail_receveur == NULL || date_envoi == NULL || message == NULL)
         {
             fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
             continue;
@@ -424,7 +425,7 @@ char send_historique(int cnx, PGresult *res, char *clientID, char *clientIP, int
 
         // Formater le message à envoyer
         char buffer[10000]; // Assurer que la taille du buffer est suffisante pour le message formaté
-        int n = snprintf(buffer, sizeof(buffer), "%s->%s\t\t%s\n%s\n\n", mail_envoyeur, mail_receveur, date_envoi, message);
+        int n = snprintf(buffer, sizeof(buffer), "[%s] %s->%s\t\t%s\n%s\n\n", id_message, mail_envoyeur, mail_receveur, date_envoi, message);
 
         // Vérifier si la taille du message dépasse la taille du buffer
         if (n >= sizeof(buffer))
@@ -982,6 +983,11 @@ int main(int argc, char *argv[])
                         // Si pas d'espace, alors l'ID client est jusqu'à la fin
                         strcpy(id_client, id_client_start);
                     }
+
+                    if (!is_positive_integer(id_client)) {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
                     
                     char query[2048];
                     snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
@@ -1007,7 +1013,7 @@ int main(int argc, char *argv[])
                         }
                         
                         // Obtenir les messages avec ce client spécifique
-                        snprintf(query, sizeof(query), "SELECT email_envoyeur, email_receveur, message, date_envoi_affichee FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s') OFFSET '%d' LIMIT '%s';", id_compte_client, id_client, id_client, id_compte_client, offset, taille_bloc);
+                        snprintf(query, sizeof(query), "SELECT id, email_envoyeur, email_receveur, message, date_envoi_affichee FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s') OFFSET '%d' LIMIT '%s';", id_compte_client, id_client, id_client, id_compte_client, offset, taille_bloc);
                         res = execute(conn, query);
 
                         // Pas d'obtention de messages
@@ -1029,6 +1035,75 @@ int main(int argc, char *argv[])
                         {
                             // Tout s'est bien passé
                             logs("Historique des messages envoyé.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                            send_historique(cnx, res, id_compte_client, client_ip, verbose);
+                        }
+                    }
+                }
+            }
+            else if (strncmp(trimmed_buffer, "/precedent", 10) == 0) {
+                if (strcmp(trimmed_buffer, "/precedent -h") == 0) {
+                    logs("Commande d'aide /precedent", id_compte_client, client_ip, verbose);
+                    write(cnx, "Usage: /precedent {id_client} {id_message}\nAffiche les messages précédant le message spécifié de la conversation avec le client spécifié.\n", 75);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                }
+                // Ni pro ni membre
+                else if (role != MEMBRE && role != PRO)
+                {
+                    logs("Le client n'est pas connecté en tant que membre ou professionnel.", id_compte_client, client_ip, verbose);
+                    send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                }
+                else
+                {
+                    char id_client[10];
+                    char id_message[10];
+                    if (sscanf(buffer, "/precedent %9s %9s", id_client, id_message) != 2 || !is_positive_integer(id_client) || !is_positive_integer(id_message)) {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                        continue;
+                    }
+
+                    char query[1024];
+                    snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
+                    PGresult *res = execute(conn, query);
+                    if (PQntuples(res) <= 0)
+                    {
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    }
+                    // Le client spécifié existe
+                    else
+                    {
+                        // Obtenir les messages avec le client + message spécifiés
+                        snprintf(query, sizeof(query)," SELECT id, email_envoyeur, email_receveur, message, date_envoi_affichee"
+                                                      " FROM sae_db.vue_historique_message"
+                                                      " WHERE date_envoi < ("
+                                                      "      SELECT date_envoi"
+                                                      "      FROM sae_db.vue_historique_message"
+                                                      "      WHERE id = '%s'"
+                                                      "      AND ("
+                                                      "         (id_envoyeur = '%s' AND id_receveur = '%s') OR "
+                                                      "         (id_envoyeur = '%s' AND id_receveur = '%s')"
+                                                      "      )"
+                                                      "  )"
+                                                      "  AND ("
+                                                      "      (id_envoyeur = '%s' AND id_receveur = '%s') OR "
+                                                      "      (id_envoyeur = '%s' AND id_receveur = '%s')"
+                                                      "  )"
+                                                      "  ORDER BY date_envoi DESC"
+                                                      "  LIMIT '%s';"
+                        , id_message, id_compte_client, id_client, id_client, id_compte_client, id_compte_client, id_client, id_client, id_compte_client, taille_bloc);
+                        res = execute(conn, query);
+
+                        // Pas d'obtention de messages
+                        if (PQntuples(res) <= 0)
+                        {
+                            logs("Pas de messages précédents.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                        }
+                        // On obtient des messages
+                        else
+                        {
+                            // Tout s'est bien passé
+                            logs("Messages précédents envoyés.", id_compte_client, client_ip, verbose);
                             send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                             send_historique(cnx, res, id_compte_client, client_ip, verbose);
                         }
