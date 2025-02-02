@@ -15,14 +15,18 @@ void nettoyer_buffer(void)
     fgets(buffer, sizeof(buffer), stdin); // Lire et ignorer toute la ligne restante
 }
 
-void afficher_menu(char *role)
+void afficher_menu(int sock, char *role)
 {
     // Si membre
     if (strcmp(role, "membre") == 0)
     {
         printf("\n=== Menu ===\n");
         printf("1. Envoyer un message\n");
-        printf("2. Messages non lus\n");
+        char *requete = "/nb_non_lus";
+        int nb_non_lus = 0;
+        send(sock, requete, strlen(requete), 0);
+        recv(sock, &nb_non_lus, sizeof(int), 0);
+        printf("2. Messages non lus (%d)\n", nb_non_lus);
         printf("3. Informations concernant un de mes messages\n");
         printf("4. Modifier un de mes messages\n");
         printf("5. Supprimer un de mes messages\n");
@@ -33,7 +37,11 @@ void afficher_menu(char *role)
     {
         printf("\n=== Menu ===\n");
         printf("1. Envoyer un message\n");
-        printf("2. Messages non lus\n");
+        char *requete = "/nb_non_lus";
+        int nb_non_lus = 0;
+        send(sock, requete, strlen(requete), 0);
+        recv(sock, &nb_non_lus, sizeof(int), 0);
+        printf("2. Messages non lus (%d)\n", nb_non_lus);
         printf("3. Informations concernant un de mes messages\n");
         printf("4. Modifier un de mes messages\n");
         printf("5. Supprimer un de mes messages\n");
@@ -52,6 +60,7 @@ void afficher_menu(char *role)
         printf("5. Synchroniser les paramètres\n");
         printf("6. Afficher les logs\n");
         printf("7. Me déconnecter et quitter\n");
+        printf("8. Fermer le service Tchatator\n");
     }
     else
     {
@@ -107,8 +116,76 @@ void connexion(int sock)
 
 void deconnexion(int sock)
 {
+    printf("Merci d'avoir utilisé Tchatator...\n");
     char *requete = "/deconnexion";
     send(sock, requete, strlen(requete), 0);
+
+    close(sock);
+    exit(0);
+}
+
+void synchroniser_params(int sock)
+{
+    char *requete = "/sync";
+    send(sock, requete, strlen(requete), 0);
+
+    char buffer[1024];
+    ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    printf("Réponse du serveur: %s", buffer);
+}
+
+void logs(int sock)
+{
+    char *requete = "/logs";
+    send(sock, requete, strlen(requete), 0);
+
+    char buffer[1024];
+    ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    printf("Réponse du serveur: %s", buffer);
+
+    if (strncmp(buffer, "200/OK", 6) == 0)
+    {
+        while (len > 0)
+        {
+            len = recv(sock, buffer, sizeof(buffer), 0);
+            printf("%.*s", (int)len, buffer);
+        }
+    }
+    else if (strncmp(buffer, "401/UNAUTHORIZED", 16) == 0)
+    {
+        printf("Erreur: Non autorisé\n");
+    }
+    else if (strncmp(buffer, "403/FORBIDDEN", 13) == 0)
+    {
+        printf("Erreur: Accès interdit\n");
+    }
+    else if (strncmp(buffer, "404/NOT FOUND", 13) == 0)
+    {
+        printf("Erreur: Commande non trouvée\n");
+    }
+    else if (strncmp(buffer, "429/TOO MANY REQUESTS", 21) == 0)
+    {
+        printf("Erreur: Trop de requêtes\n");
+    }
+    else if (strncmp(buffer, "500/SERVER ERROR", 16) == 0)
+    {
+        printf("Erreur: Erreur serveur\n");
+    }
+    else
+    {
+        printf("Erreur inconnue: %s\n", buffer);
+    }
+}
+
+void fermer_service(int sock)
+{
+    char *requete = "/quit";
+    send(sock, requete, strlen(requete), 0);
+
+    char buffer[1024];
+    nettoyer_buffer();
+    ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    printf("Réponse du serveur: %s", buffer);
 
     close(sock);
     exit(0);
@@ -648,119 +725,137 @@ void traiter_commande(int choix, int sock, char *role)
     switch (choix)
     {
     case 1:
-        connexion(sock);
-        update_role(sock, role); // Met à jour le rôle après la connexion
+        if (strcmp(role, "aucun") == 0)
+        {
+            connexion(sock);
+            update_role(sock, role); // Met à jour le rôle après la connexion
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
+        {
+            envoyer_message(sock);
+        }
+        else
+        {
+            bloquer_client(sock);
+        }
         break;
     case 2:
-        envoyer_message(sock);
-        break;
-    case 3:
-        printf("Merci d'avoir utilisé Tchatator...\n");
-        deconnexion(sock);
-        break;
-
-    // Options disponibles selon le rôle
-    case 4:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
+        if (strcmp(role, "aucun") == 0)
+        {
+            deconnexion(sock);
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
             messages_non_lus(sock);
         }
         else
         {
-            printf("Option non disponible pour votre rôle.\n");
+            enlever_blocage(sock);
         }
         break;
-
-    case 5:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
+    case 3:
+        if (strcmp(role, "aucun") == 0)
+        {
+            printf("Option invalide.\n");
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
             info_message(sock);
         }
         else
         {
-            printf("Option non disponible pour votre rôle.\n");
+            bannir_client(sock);
         }
         break;
 
-    case 6:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
+    // Options disponibles selon le rôle
+    case 4:
+        if (strcmp(role, "aucun") == 0)
+        {
+            printf("Option invalide.\n");
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
             modifier_message(sock);
         }
         else
         {
-            printf("Option non disponible pour votre rôle.\n");
+            enlever_ban(sock);
         }
         break;
 
-    case 7:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
+    case 5:
+        if (strcmp(role, "aucun") == 0)
+        {
+            printf("Option invalide.\n");
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
             supprimer_message(sock);
         }
         else
         {
-            printf("Option non disponible pour votre rôle.\n");
+            synchroniser_params(sock);
         }
         break;
 
-    case 8:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
+    case 6:
+        if (strcmp(role, "aucun") == 0)
+        {
+            printf("Option invalide.\n");
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
             historique_message(sock);
         }
         else
         {
-            printf("Option non disponible pour votre rôle.\n");
+            logs(sock);
+        }
+        break;
+
+    case 7:
+        if (strcmp(role, "aucun") == 0)
+        {
+            printf("Option invalide.\n");
+        }
+        else if (strcmp(role, "membre") == 0 || strcmp(role, "admin") == 0)
+        {
+            deconnexion(sock);
+        }
+        else
+        {
+            bloquer_client(sock);
+        }
+        break;
+
+    case 8:
+        if (strcmp(role, "admin") == 0)
+        {
+            fermer_service(sock); // TODO
+        }
+        else if (strcmp(role, "pro") == 0)
+        {
+            enlever_blocage(sock);
+        }
+        else
+        {
+            printf("Option invalide.\n");
         }
         break;
 
     case 9:
         if (strcmp(role, "pro"))
         {
-            bloquer_client(sock);
+            deconnexion(sock);
         }
         else
         {
-            printf("Option non disponible pour votre rôle.\n");
+            printf("Option invalide.\n");
         }
         break;
-
-    case 10:
-        if (strcmp(role, "pro"))
-        {
-            enlever_blocage(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-
-    case 11:
-        if (strcmp(role, "pro"))
-        {
-            bannir_client(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-
-    case 12:
-        if (strcmp(role, "pro"))
-        {
-            enlever_ban(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
-        break;
-
     default:
-        printf("Option invalide, essayez encore.\n");
+        printf("Option invalide.\n");
     }
 }
 
@@ -769,14 +864,14 @@ int main(int argc, char *argv[])
     // Vérifier si un port est passé en paramètre
     if (argc <= 1)
     {
-        perror("Aucun port spécifié");
+        printf("Aucun port spécifié\n");
         exit(1);
     }
 
     int port = atoi(argv[1]);
     if (!port)
     {
-        perror("Veuilleez saisir un port valide en paramètre");
+        printf("Veuillez saisir un port valide en paramètre");
         exit(1);
     }
 
