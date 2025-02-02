@@ -42,6 +42,22 @@ const char *role_to_string(Role role)
     }
 }
 
+int is_positive_integer(const char *str)
+{
+    if (str == NULL || *str == '\0')
+    {
+        return 0;
+    }
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        if (!isdigit(str[i]))
+        {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 char *trim_newline(const char *str)
 {
     int len = strlen(str);
@@ -119,6 +135,18 @@ char *get_param(struct param *params, const char *name)
     }
     printf("Paramètre [%s] introuvable dans le fichier de paramétrage\n", name);
     exit(1);
+}
+
+PGresult *execute(PGconn *conn, char *query)
+{
+    PGresult *res = PQexec(conn, query);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        exit(EXIT_FAILURE);
+    }
+    return res;
 }
 
 int logs(char *message, char *clientID, char *clientIP, int verbose)
@@ -204,6 +232,63 @@ char send_answer(int cnx, struct param *params, char *code, char *clientID, char
     }
 }
 
+char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int verbose)
+{
+    int result;
+    char query[256];
+
+    if (strcmp(clientID, "") != 0)
+    {
+        snprintf(query, sizeof(query), "SELECT count FROM sae_db.vue_nb_messages_non_lus WHERE id_receveur = '%s';", clientID);
+        PGresult *res = execute(conn, query);
+        if (PQntuples(res) > 0)
+        {
+            result = atoi(PQgetvalue(res, 0, 0));
+        }
+        else
+        {
+            result = 0;
+        }
+        PQclear(res);
+    }
+    else
+    {
+        result = 0;
+    }
+
+    // Log le message
+    size_t log_len = sizeof(int) + 100;
+    char *to_log = malloc(log_len);
+
+    if (to_log)
+    {
+        // Créer le log
+        snprintf(to_log, log_len, "Réponse envoyée : %d", result);
+        logs(to_log, clientID, clientIP, verbose);
+
+        // Envoi du rôle
+        ssize_t bytes_sent = write(cnx, &result, sizeof(int));
+
+        if (bytes_sent == -1)
+        {
+            // Gérer l'erreur d'envoi
+            perror("Erreur lors de l'envoi du nombre de messages non lus");
+            free(to_log);
+            return 0;
+        }
+
+        // Si l'envoi a réussi, on libère la mémoire allouée pour le log
+        free(to_log);
+    }
+    else
+    {
+        perror("Échec de l'allocation de mémoire pour le log");
+        return -1;
+    }
+
+    return 1; // Rôle envoyé avec succès
+}
+
 char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
 {
     // Convertir le rôle en chaîne de caractères
@@ -218,8 +303,6 @@ char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
         // Créer le log
         snprintf(to_log, log_len, "Réponse envoyée : %s", string_role);
         logs(to_log, clientID, clientIP, verbose);
-
-        strcat(string_role, "\n");
 
         // Envoi du rôle
         ssize_t bytes_sent = write(cnx, string_role, strlen(string_role));
@@ -238,9 +321,150 @@ char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
     else
     {
         perror("Échec de l'allocation de mémoire pour le log");
-        return 0;
+        return -1;
     }
+
     return 1; // Rôle envoyé avec succès
+}
+
+char send_messages_non_lus(PGconn *conn, int cnx, PGresult *res, char *clientID, char *clientIP, int verbose)
+{
+    int rows = PQntuples(res); // Nombre de lignes dans le résultat
+    int i;
+
+    // On parcourt chaque ligne du résultat
+    for (i = 0; i < rows; i++)
+    {
+        // Récupérer les valeurs des colonnes
+        const char *id_message = PQgetvalue(res, i, 0);
+        const char *mail_envoyeur = PQgetvalue(res, i, 1);
+        const char *message = PQgetvalue(res, i, 2);
+        const char *date_envoi = PQgetvalue(res, i, 3);
+
+        // Vérifier que les valeurs ne sont pas NULL
+        if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL)
+        {
+            fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
+            continue; // Passer à la prochaine ligne
+        }
+
+        // Formater le message à envoyer
+        char buffer[10000]; // Assurer que la taille du buffer est suffisante pour le message formaté
+        int n = snprintf(buffer, sizeof(buffer), "%s\t\t%s\n%s\n\n", mail_envoyeur, date_envoi, message);
+
+        // Vérifier si la taille du message dépasse la taille du buffer
+        if (n >= sizeof(buffer))
+        {
+            fprintf(stderr, "Le message est trop long pour le buffer\n");
+            return -1;
+        }
+
+        // Envoyer via la socket
+        size_t total_sent = 0; // Total des bytes envoyés
+        ssize_t sent_bytes;
+        size_t buffer_len = strlen(buffer);
+
+        while (total_sent < buffer_len)
+        {
+            sent_bytes = write(cnx, buffer + total_sent, buffer_len - total_sent);
+            if (sent_bytes == -1)
+            {
+                perror("Erreur d'envoi sur la socket");
+                return -1; // Erreur lors de l'envoi
+            }
+            else
+            {
+                // Marquer les messages comme lus dans la base de données
+                char query[256];
+                snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id='%s';", id_message);
+                execute(conn, query);
+                total_sent += sent_bytes; // Mettre à jour le nombre total de bytes envoyés
+            }
+        }
+        size_t log_len = strlen(buffer) + 100;
+        char *to_log = malloc(log_len);
+
+        if (to_log)
+        {
+            // Créer le log
+            snprintf(to_log, log_len, "Réponse envoyée : %s", trim_newline(buffer));
+            logs(to_log, clientID, clientIP, verbose);
+            free(to_log);
+        }
+        else
+        {
+            perror("Échec de l'allocation de mémoire pour le log");
+            return -1;
+        }
+    }
+
+    return 1; // Succès
+}
+
+char send_historique(int cnx, PGresult *res, char *clientID, char *clientIP, int verbose)
+{
+    int rows = PQntuples(res); // Nombre de lignes dans le résultat
+    int i;
+
+    // On parcourt chaque ligne du résultat
+    for (i = 0; i < rows; i++)
+    {
+        // Récupérer les valeurs des colonnes
+        const char *mail_envoyeur = PQgetvalue(res, i, 0);
+        const char *mail_receveur = PQgetvalue(res, i, 1);
+        const char *message = PQgetvalue(res, i, 2);
+        const char *date_envoi = PQgetvalue(res, i, 3);
+
+        // Vérifier que les valeurs ne sont pas NULL
+        if (mail_envoyeur == NULL || mail_receveur == NULL || date_envoi == NULL || message == NULL)
+        {
+            fprintf(stderr, "Une des valeurs extraites est NULL pour la ligne %d\n", i);
+            continue;
+        }
+
+        // Formater le message à envoyer
+        char buffer[10000]; // Assurer que la taille du buffer est suffisante pour le message formaté
+        int n = snprintf(buffer, sizeof(buffer), "%s->%s\t\t%s\n%s\n\n", mail_envoyeur, mail_receveur, date_envoi, message);
+
+        // Vérifier si la taille du message dépasse la taille du buffer
+        if (n >= sizeof(buffer))
+        {
+            fprintf(stderr, "Le message est trop long pour le buffer\n");
+            return -1;
+        }
+
+        // Envoyer via la socket
+        size_t total_sent = 0;
+        ssize_t sent_bytes;
+        size_t buffer_len = strlen(buffer);
+
+        while (total_sent < buffer_len)
+        {
+            sent_bytes = write(cnx, buffer + total_sent, buffer_len - total_sent);
+            if (sent_bytes == -1)
+            {
+                perror("Erreur d'envoi sur la socket");
+                return -1; // Erreur lors de l'envoi
+            }
+            total_sent += sent_bytes; // Mettre à jour le nombre total de bytes envoyés
+        }
+        size_t log_len = strlen(buffer) + 100;
+        char *to_log = malloc(log_len);
+
+        if (to_log)
+        {
+            // Créer le log
+            snprintf(to_log, log_len, "Réponse envoyée : %s", trim_newline(buffer));
+            logs(to_log, clientID, clientIP, verbose);
+            free(to_log);
+        }
+        else
+        {
+            perror("Échec de l'allocation de mémoire pour le log");
+            return -1;
+        }
+    }
+    return 1; // Succès
 }
 
 void exit_on_error(PGconn *conn)
@@ -272,18 +496,6 @@ PGconn *get_connection(struct param *params, int verbose)
     logs("Successfully connected to the database!", "", "", verbose);
 
     return conn;
-}
-
-PGresult *execute(PGconn *conn, char *query)
-{
-    PGresult *res = PQexec(conn, query);
-    if (PQresultStatus(res) == PGRES_FATAL_ERROR)
-    {
-        fprintf(stderr, "Query failed: %s\n", PQerrorMessage(conn));
-        PQclear(res);
-        exit(EXIT_FAILURE);
-    }
-    return res;
 }
 
 /*
@@ -425,6 +637,7 @@ int main(int argc, char *argv[])
     int size;
     int cnx;
     struct sockaddr_in conn_addr;
+    char *taille_bloc = get_param(params, "taille_bloc");
 
     // Création de la socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -501,7 +714,7 @@ int main(int argc, char *argv[])
         char *client_ip = inet_ntoa(conn_addr.sin_addr);
         PGconn *conn = get_connection(params, verbose);
         char buffer[2048];
-        char id_compte_client[1024];
+        char id_compte_client[50];
         int len;
         char *trimmed_buffer;
 
@@ -520,7 +733,12 @@ int main(int argc, char *argv[])
             // ###############
             // # EXTRA UTILS #
             // ###############
-            if (strncmp(trimmed_buffer, "/role", 5) == 0)
+            if (strncmp(trimmed_buffer, "/nb_non_lus", 11) == 0)
+            {
+                logs("Commande /nb_non_lus", id_compte_client, client_ip, verbose);
+                send_nb_non_lus(cnx, conn, id_compte_client, client_ip, verbose);
+            }
+            else if (strncmp(trimmed_buffer, "/role", 5) == 0)
             {
                 logs("Commande /role", id_compte_client, client_ip, verbose);
                 send_role(cnx, role, id_compte_client, client_ip, verbose);
@@ -540,8 +758,9 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    logs("Déconnexion du client", id_compte_client, client_ip, verbose);
+                    logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
                     strcpy(id_compte_client, "");
+                    role = AUCUN;
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     break;
                 }
@@ -694,7 +913,45 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                    // Prendre en compte le bloc donné s'il y en a un
+                    char *bloc_param = strstr(trimmed_buffer, "?page=");
+                    char *bloc = "0";
+                    if (bloc_param != NULL && strcmp(bloc_param + 6, "") != 0)
+                    {
+                        bloc = bloc_param + 6; // `?page=` fait 6 caractères, on saute cette partie
+                    }
+                    int offset = atoi(bloc) * atoi(taille_bloc);
+                    if (offset < 0) {
+                        offset = 0;
+                    }
+
+                    // Regarder s'il y a des messages dans la boîte de messages non lus
+                    char query[256];
+                    snprintf(query, sizeof(query), "SELECT id, email_envoyeur, message, date_envoi_affichee FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s' OFFSET '%d' LIMIT '%s';", id_compte_client, offset, taille_bloc);
+                    PGresult *res = execute(conn, query);
+
+                    // Cas 1 : il y a des messages non lus dans sa boîte
+                    if (PQntuples(res) > 0)
+                    {
+                        // Tout s'est bien passé
+                        logs("Messages non lus envoyés.", id_compte_client, client_ip, verbose);
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        send_messages_non_lus(conn, cnx, res, id_compte_client, client_ip, verbose);
+                    }
+                    // Cas 2 : il n'y a aucun message
+                    else
+                    {
+                        if (atoi(bloc) <= 0)
+                        {
+                            logs("Pas de messages non lus.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            logs("Page invalide.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+                        }
+                    }
                 }
             }
             else if (strncmp(trimmed_buffer, "/conversation ", 14) == 0)
@@ -705,9 +962,77 @@ int main(int argc, char *argv[])
                     write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
+                // Ni pro ni membre
+                else if (role != MEMBRE && role != PRO)
+                {
+                    logs("Le client n'est pas connecté en tant que membre ou professionnel.", id_compte_client, client_ip, verbose);
+                    send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                }
                 else
                 {
-                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                    // Extraire l'id_client
+                    char *id_client_start = trimmed_buffer + 14;
+                    char *space_pos = strchr(id_client_start, ' ');
+
+                    char id_client[10];
+                    if (space_pos != NULL) {
+                        strncpy(id_client, id_client_start, space_pos - id_client_start);
+                        id_client[space_pos - id_client_start] = '\0'; // Terminer la chaîne
+                    } else {
+                        // Si pas d'espace, alors l'ID client est jusqu'à la fin
+                        strcpy(id_client, id_client_start);
+                    }
+                    
+                    char query[2048];
+                    snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
+                    PGresult *res = execute(conn, query);
+                    if (PQntuples(res) <= 0)
+                    {
+                        logs("Le client spécifié n'existe pas.", id_compte_client, client_ip, verbose);
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    }
+                    // Le client spécifié existe
+                    else
+                    {
+                        // Prendre en compte le bloc donné s'il y en a un
+                        char *bloc_param = strstr(trimmed_buffer, "?page=");
+                        char *bloc = "0";
+                        if (bloc_param != NULL && strcmp(bloc_param + 6, "") != 0)
+                        {
+                            bloc = bloc_param + 6; // `?page=` fait 6 caractères, on saute cette partie
+                        }
+                        int offset = atoi(bloc) * atoi(taille_bloc);
+                        if (offset < 0) {
+                            offset = 0;
+                        }
+                        
+                        // Obtenir les messages avec ce client spécifique
+                        snprintf(query, sizeof(query), "SELECT email_envoyeur, email_receveur, message, date_envoi_affichee FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s') OFFSET '%d' LIMIT '%s';", id_compte_client, id_client, id_client, id_compte_client, offset, taille_bloc);
+                        res = execute(conn, query);
+
+                        // Pas d'obtention de messages
+                        if (PQntuples(res) <= 0)
+                        {
+                            if (atoi(bloc) <= 0)
+                            {
+                                logs("Pas de messages avec ce client.", id_compte_client, client_ip, verbose);
+                                send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                            }
+                            else
+                            {
+                                logs("Page invalide.", id_compte_client, client_ip, verbose);
+                                send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+                            }
+                        }
+                        // On obtient des messages
+                        else
+                        {
+                            // Tout s'est bien passé
+                            logs("Historique des messages envoyé.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                            send_historique(cnx, res, id_compte_client, client_ip, verbose);
+                        }
+                    }
                 }
             }
             else if (strncmp(trimmed_buffer, "/info ", 6) == 0)
@@ -872,12 +1197,49 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
                 {
+                    logs("Commande d'aide /supprime", id_compte_client, client_ip, verbose);
                     write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
                 {
-                    send_answer(cnx, params, "501", id_compte_client, client_ip, verbose);
+                    // Vérifier si le message existe
+                    char *id_mesage = trimmed_buffer + 10;
+                    char query[256];
+                    PGresult *res = NULL;
+
+                    if (is_positive_integer(id_mesage))
+                    {
+                        snprintf(query, sizeof(query), "SELECT id_envoyeur FROM sae_db._message WHERE id = '%s' AND date_suppression IS NULL;", id_mesage);
+                        res = execute(conn, query);
+                    }
+
+                    // Le message existe-t-il ?
+                    if (PQntuples(res) > 0)
+                    {
+                        // Vérifier si ce message est à nous
+                        if (atoi(PQgetvalue(res, 0, 0)) == atoi(id_compte_client))
+                        {
+                            // Mettre la date de suppression à la date actuelle (si pas déjà supprimé)
+                            char *id_mesage = trimmed_buffer + 10;
+                            char query[256];
+
+                            snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_suppression = NOW() WHERE id = '%d' AND date_suppression IS NULL;", atoi(id_mesage));
+                            execute(conn, query);
+                            logs("Message supprimé.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            logs("Le client n'est pas l'envoyeur du message.", id_compte_client, client_ip, verbose);
+                            send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
+                        }
+                    }
+                    else
+                    {
+                        logs("Le message n'existe pas.", id_compte_client, client_ip, verbose);
+                        send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
+                    }
                 }
             }
 
@@ -909,7 +1271,7 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    char query[256];
+                    char query[2048];
                     if (strcmp(id_compte_client, "admin") == 0)
                     {
                         snprintf(query, sizeof(query), "INSERT INTO sae_db._blocage (id_bloque, id_bloqueur) VALUES ('%s', '-1');", id_client);
@@ -954,8 +1316,8 @@ int main(int argc, char *argv[])
                         continue;
                     }
 
-                    char query[256];
-                    char *id_blocage[3];
+                    char query[2048];
+                    char id_blocage[3];
 
                     if (strcmp(id_compte_client, "admin") == 0)
                     {
@@ -1019,7 +1381,6 @@ int main(int argc, char *argv[])
                     char query[256];
                     snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
                     execute(conn, query);
-
                     logs("Client banni.", id_compte_client, client_ip, verbose);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
@@ -1140,6 +1501,7 @@ int main(int argc, char *argv[])
                         file = fopen(log_file, "r");
                         if (!file)
                         {
+                            logs("Échec de l'ouverture du fichier de logs.", id_compte_client, client_ip, verbose);
                             perror("fopen failed");
                             send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
                         }

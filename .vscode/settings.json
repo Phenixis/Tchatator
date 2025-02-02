@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "libpq-fe.h": "c",
+        "fcntl.h": "c",
+        "time.h": "c",
+        "in.h": "c",
+        "stdio.h": "c",
+        "select.h": "c",
+        "unistd.h": "c"
+    }
+}

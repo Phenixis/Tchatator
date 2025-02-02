@@ -1,58 +1,50 @@
+#include <sys/select.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <ctype.h>
+#include <time.h>
 
-void nettoyer_buffer()
+void nettoyer_buffer(void)
 {
-    while (getchar() != '\n')
-        ; // Consomme les caractères jusqu'au '\n'
+    char buffer[100];                     // Un buffer assez grand pour lire toute la ligne
+    fgets(buffer, sizeof(buffer), stdin); // Lire et ignorer toute la ligne restante
 }
 
-void afficher_menu(char *role)
+void afficher_menu(int sock, char *role)
 {
-    // Si membre
-    if (strcmp(role, "membre") == 0)
+    printf("\n=== Menu ===\n");
+    printf("1.  Me connecter\n");
+    printf("2.  Envoyer un message\n");
+    printf("3.  Me déconnecter et quitter\n");
+
+    // Si connecté
+    if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
     {
-        printf("\n=== Menu ===\n");
-        printf("1. Envoyer un message\n");
-        printf("2. Messages non lus\n");
-        printf("3. Informations concernant un de mes messages\n");
-        printf("4. Modifier un de mes messages\n");
-        printf("5. Supprimer un de mes messages\n");
-        printf("6. Historique des messages avec un client\n");
-        printf("7. Me déconnecter et quitter\n");
+        // Connaître le nombre de messages non lus
+        char *requete = "/nb_non_lus";
+        int nb_non_lus = 0;
+        send(sock, requete, strlen(requete), 0);
+        recv(sock, &nb_non_lus, sizeof(int), 0);
+
+        printf("4.  Messages non lus (%d)\n", nb_non_lus);
+        printf("5.  Informations concernant un de mes messages\n");
+        printf("6.  Modifier un de mes messages\n");
+        printf("7.  Supprimer un de mes messages\n");
+        printf("8.  Historique des messages avec un autre client\n");
     }
-    else if (strcmp(role, "pro") == 0)
+
+    // Si pro
+    if (strcmp(role, "pro") == 0)
     {
-        printf("\n=== Menu ===\n");
-        printf("1. Envoyer un message\n");
-        printf("2. Messages non lus\n");
-        printf("3. Informations concernant un de mes messages\n");
-        printf("4. Modifier un de mes messages\n");
-        printf("5. Supprimer un de mes messages\n");
-        printf("6. Historique des messages avec un client\n");
-        printf("7. Bloquer un client 24h\n");
-        printf("8. Lever le blocage d'un client\n");
-        printf("9. Me déconnecter et quitter\n");
-    }
-    else if (strcmp(role, "admin") == 0)
-    {
-        printf("\n=== Menu ===\n");
-        printf("1. Bloquer un client 24h\n");
-        printf("2. Lever le blocage d'un client\n");
-        printf("3. Bannir un client définitivement\n");
-        printf("4. Lever le ban d'un client\n");
-        printf("5. Synchroniser les paramètres\n");
-        printf("6. Afficher les logs\n");
-        printf("7. Me déconnecter et quitter\n");
-    }
-    else
-    {
-        printf("\n=== Menu ===\n");
-        printf("1. Me connecter\n");
-        printf("2. Quitter\n");
+        printf("9.  Bloquer un client 24h\n");
+        printf("10  Lever le blocage d'un client 24h\n");
+        printf("11. Bannir un client définitivement\n");
+        printf("12. Lever le ban d'un client\n");
     }
 
     printf("Choisissez une option: ");
@@ -102,7 +94,6 @@ void connexion(int sock)
 
 void deconnexion(int sock)
 {
-    printf("Merci d'avoir utilisé Tchatator...\n");
     char *requete = "/deconnexion";
     send(sock, requete, strlen(requete), 0);
 
@@ -137,52 +128,359 @@ void envoyer_message(int sock)
     printf("Réponse du serveur: %s", buffer);
 }
 
+char *trim_newline(const char *str)
+{
+    int len = strlen(str);
+    char *trimmed_str = (char *)malloc(len + 1);
+    if (!trimmed_str)
+    {
+        perror("malloc failed");
+        exit(1);
+    }
+    strcpy(trimmed_str, str);
+    while (len > 0 && (trimmed_str[len - 1] == '\n' || trimmed_str[len - 1] == '\r' || isspace(trimmed_str[len - 1])))
+    {
+        trimmed_str[len - 1] = '\0';
+        len--;
+    }
+    return trimmed_str;
+}
+
+void messages_non_lus(int sock)
+{
+    int bloc;
+    char input[10];
+
+    printf("N°page (facultatif, par défaut à 0) : ");
+    if (fgets(input, sizeof(input), stdin) != NULL)
+    {
+        // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
+        if (input[0] == '\n')
+        {
+            bloc = 0;
+        }
+        else
+        {
+            bloc = atoi(input);
+        }
+    }
+
+    // Demander au serveur les messages non lus
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/liste ?page=%d", bloc);
+    send(sock, requete, strlen(requete), 0);
+
+    char buffer[1024]; // Tampon pour réception
+    ssize_t bytes_received;
+    char full_message[10000];  // Tampon pour accumuler le message complet
+    size_t total_received = 0; // Taille totale des données reçues
+
+    // Boucle pour recevoir les messages
+    printf("\n------------------------------------------\n");
+    while (1)
+    {
+        // Préparer l'ensemble de descripteurs pour select()
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+
+        // Définir le timeout à 200ms
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 200000; // 200ms
+
+        // Appel select pour attendre des données ou un timeout
+        int ret = select(sock + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ret == -1)
+        {
+            // En cas d'erreur
+            perror("Erreur de select");
+            break;
+        }
+        else if (ret == 0)
+        {
+            // Plus rien reçu dans les dernières 200ms, sortie de la boucle
+            if (total_received > 0)
+            {
+                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                {
+                    printf("Vous n'avez aucun nouveau message\n");
+                }
+                else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
+                {
+                    printf("Votre rôle actuel ne vous permet pas d'avoir des messages\n");
+                }
+                else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
+                {
+                    printf("La page que vous demandez n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
+                {
+                    printf("Erreur du serveur lors de la lecture de vos messages");
+                }
+            }
+            break;
+        }
+        else
+        {
+            // Il y a des données à recevoir
+            bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytes_received > 0)
+            {
+                buffer[bytes_received] = '\0';
+
+                // Copier les données reçues dans le tampon complet
+                if (total_received + bytes_received < sizeof(full_message))
+                {
+                    memcpy(full_message + total_received, buffer, bytes_received);
+                    total_received += bytes_received;
+                }
+                else
+                {
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    break;
+                }
+
+                // Vérifier si un message complet a été reçu (en supposant que chaque message se termine par "\n\n")
+                if (strstr(full_message, "\n\n") != NULL)
+                {
+                    // Traiter le message complet
+                    if (strncmp(full_message, "200/OK\n", 7) == 0)
+                    {
+                        memmove(full_message, full_message + 7, strlen(full_message) - 6);
+                    }
+
+                    printf("%.*s", (int)(total_received), full_message);
+
+                    // Réinitialiser les tampons pour recevoir un autre message
+                    total_received = 0;
+                    memset(full_message, 0, sizeof(full_message));
+                }
+            }
+            else if (bytes_received == 0)
+            {
+                // Le serveur a fermé la connexion
+                printf("Le serveur a clos la connexion.\n");
+                break;
+            }
+            else if (bytes_received == -1)
+            {
+                // Autres erreurs de réception
+                perror("Erreur de réception des données\n");
+                break; // Sortir de la boucle en cas d'erreur
+            }
+        }
+    }
+    printf("------------------------------------------\n");
+}
+
+void supprimer_message(int sock)
+{
+    char *id_message = malloc(15 * sizeof(char));
+
+    printf("Entrez l'id du message : ");
+    scanf("%s", id_message);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // Construire la requête /supprime
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/supprime %s", id_message);
+
+    // Envoyer la requête au serveur
+    send(sock, requete, strlen(requete), 0);
+    printf("Message envoyé: %s\n", requete);
+
+    // Recevoir la réponse du serveur
+    char buffer[1024];
+    int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
+    if (recv_bytes > 0)
+    {
+        buffer[recv_bytes] = '\0';
+        printf("Réponse du serveur: %s", buffer);
+    }
+    else
+    {
+        printf("Impossible de recevoir la réponse du serveur\n");
+    }
+    free(id_message);
+}
+
+void x_messages_precedents(int sock, char *id_client) {
+    char *id_message = malloc(15 * sizeof(char));
+    printf("(Tapez 'q' pour quitter la navigation)\n");
+    printf("Entrez l'id du message dont vous souhaitez voir les messages précédents : ");
+    scanf("%s", id_message);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // 1/2 chance de recommencer
+    srand(time(NULL));
+    int randNum = rand();
+    // Check if the number is less than half of RAND_MAX
+    if (randNum % 2 == 0) {
+        x_messages_precedents(sock, id_client);
+    }
+}
+
+void historique_message(int sock)
+{
+    char *id_client = malloc(15 * sizeof(char));
+    int bloc;
+    char input[10];
+    char buffer[1024];
+    int peut_naviguer = 0;
+
+    printf("Entrez l'id d'un autre client : ");
+    scanf("%s", id_client);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    printf("N°page (facultatif, par défaut à 0) : ");
+    if (fgets(input, sizeof(input), stdin) != NULL)
+    {
+        // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
+        if (input[0] == '\n')
+        {
+            bloc = 0;
+        }
+        else
+        {
+            bloc = atoi(input);
+        }
+    }
+
+    // Envoyer la requête au serveur
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/conversation %s ?page=%d", id_client, bloc);
+    send(sock, requete, strlen(requete), 0);
+
+    ssize_t bytes_received;
+    char full_message[10000];  // Tampon pour accumuler le message complet
+    size_t total_received = 0; // Taille totale des données reçues
+
+    // Boucle pour recevoir les messages
+    printf("\n------------------------------------------\n");
+    while (1)
+    {
+        // Préparer l'ensemble de descripteurs pour select()
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+
+        // Définir le timeout à 200ms
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 200000; // 200ms
+
+        // Appel select pour attendre des données ou un timeout
+        int ret = select(sock + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ret == -1)
+        {
+            // En cas d'erreur
+            perror("Erreur de select");
+            break;
+        }
+        else if (ret == 0)
+        {
+            // Plus rien reçu dans les dernières 200ms, sortie de la boucle
+            if (total_received > 0)
+            {
+                if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
+                {
+                    printf("Ce client n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                {
+                    printf("Vous n'avez jamais échangé avec ce client\n");
+                }
+                else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
+                {
+                    printf("Votre rôle actuel ne vous permet pas d'avoir des messages\n");
+                }
+                else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
+                {
+                    printf("La page demandée n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
+                {
+                    printf("Erreur du serveur lors de la lecture de vos messages");
+                }
+            }
+            break;
+        }
+        else
+        {
+            // Il y a des messages à afficher
+            bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytes_received > 0)
+            {
+                buffer[bytes_received] = '\0';
+
+                // Copier les données reçues dans le tampon complet
+                if (total_received + bytes_received < sizeof(full_message))
+                {
+                    memcpy(full_message + total_received, buffer, bytes_received);
+                    total_received += bytes_received;
+                }
+                else
+                {
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    break;
+                }
+
+                // Vérifier si un message complet a été reçu (en supposant que chaque message se termine par "\n\n")
+                if (strstr(full_message, "\n\n") != NULL)
+                {
+                    // Traiter le message complet
+                    if (strncmp(full_message, "200/OK\n", 7) == 0)
+                    {
+                        memmove(full_message, full_message + 7, strlen(full_message) - 6);
+                    }
+
+                    peut_naviguer = 1;
+                    printf("%.*s", (int)(total_received), full_message);
+
+                    // Réinitialiser les tampons pour recevoir un autre message
+                    total_received = 0;
+                    memset(full_message, 0, sizeof(full_message));
+                }
+            }
+            else if (bytes_received == 0)
+            {
+                // Le serveur a fermé la connexion
+                printf("Le serveur a terminé l'envoi des messages.\n");
+                break; // Sortir de la boucle
+            }
+            else if (bytes_received == -1)
+            {
+                // Autres erreurs de réception
+                perror("Erreur de réception des données\n");
+                break; // Sortir de la boucle en cas d'erreur
+            }
+        }
+    }
+    printf("------------------------------------------\n");
+
+    if (peut_naviguer) {
+        x_messages_precedents(sock, id_client);
+    }
+}
+
 // ######################
 // FONCTIONS A TERMINER #
 // ######################
-void messages_non_lus(int sock)
-{
-    char *requete = "/liste";
-    send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
-}
-
 void info_message(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
 }
 
 void modifier_message(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
-}
-
-void supprimer_message(int sock)
-{
-    char *requete = "/liste";
-    send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
-}
-
-void historique_message(int sock)
-{
-    char *requete = "/liste";
-    send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
 }
 
 void bloquer_client(int sock)
@@ -198,27 +496,18 @@ void enlever_blocage(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
 }
 
 void bannir_client(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
 }
 
 void enlever_ban(int sock)
 {
     char *requete = "/liste";
     send(sock, requete, strlen(requete), 0);
-
-    close(sock);
-    exit(0);
 }
 // #######################
 // /FONCTIONS A TERMINER #
@@ -230,60 +519,22 @@ void traiter_commande(int choix, int sock, char *role)
     switch (choix)
     {
     case 1:
-        if (strcmp(role, "membre") == 0 | strcmp(role, "pro") == 0)
-        {
-            envoyer_message(sock);
-        }
-        else if (strcmp(role, "admin") == 0)
-        {
-            bloquer_client(sock);
-        }
-        else
-        {
-            connexion(sock);
-            update_role(sock, role); // Met à jour le rôle après la connexion
-        }
+        connexion(sock);
+        update_role(sock, role); // Met à jour le rôle après la connexion
         break;
-
     case 2:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
-        {
-            messages_non_lus(sock);
-        }
-        else if (strcmp(role, "admin"))
-        {
-            enlever_blocage(sock);
-        }
-        else
-        {
-            deconnexion(sock);
-        }
+        envoyer_message(sock);
         break;
-
     case 3:
-        if (strcmp(role, "membre") || strcmp(role, "pro"))
-        {
-            info_message(sock);
-        }
-        else if (strcmp(role, "admin"))
-        {
-            bannir_client(sock);
-        }
-        else
-        {
-            printf("Option non disponible pour votre rôle.\n");
-        }
+        printf("Merci d'avoir utilisé Tchatator...\n");
+        deconnexion(sock);
         break;
 
+    // Options disponibles selon le rôle
     case 4:
         if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            modifier_message(sock);
-            // messages_non_lus(sock);
-        }
-        else if (strcmp(role, "admin"))
-        {
-            enlever_ban(sock);
+            messages_non_lus(sock);
         }
         else
         {
@@ -294,12 +545,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 5:
         if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            supprimer_message(sock);
-            // info_message(sock);
-        }
-        else if (strcmp(role, "admin"))
-        {
-            sync(sock);
+            info_message(sock);
         }
         else
         {
@@ -310,12 +556,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 6:
         if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            historique_message(sock);
-            // modifier_message(sock);
-        }
-        else if (strcmp(role, "admin"))
-        {
-            logs(sock);
+            modifier_message(sock);
         }
         else
         {
@@ -324,14 +565,9 @@ void traiter_commande(int choix, int sock, char *role)
         break;
 
     case 7:
-        if (strcmp(role, "membre") || strcmp(role, "admin"))
+        if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            deconnexion(sock);
-            // supprimer_message(sock);
-        }
-        else if (strcmp(role, "pro"))
-        {
-            bloquer_client(sock);
+            supprimer_message(sock);
         }
         else
         {
@@ -340,10 +576,9 @@ void traiter_commande(int choix, int sock, char *role)
         break;
 
     case 8:
-        if (strcmp(role, "pro"))
+        if (strcmp(role, "membre") || strcmp(role, "pro"))
         {
-            enlever_blocage(sock);
-            // historique_message(sock);
+            historique_message(sock);
         }
         else
         {
@@ -354,7 +589,40 @@ void traiter_commande(int choix, int sock, char *role)
     case 9:
         if (strcmp(role, "pro"))
         {
-            deconnexion(sock);
+            bloquer_client(sock);
+        }
+        else
+        {
+            printf("Option non disponible pour votre rôle.\n");
+        }
+        break;
+
+    case 10:
+        if (strcmp(role, "pro"))
+        {
+            enlever_blocage(sock);
+        }
+        else
+        {
+            printf("Option non disponible pour votre rôle.\n");
+        }
+        break;
+
+    case 11:
+        if (strcmp(role, "pro"))
+        {
+            bannir_client(sock);
+        }
+        else
+        {
+            printf("Option non disponible pour votre rôle.\n");
+        }
+        break;
+
+    case 12:
+        if (strcmp(role, "pro"))
+        {
+            enlever_ban(sock);
         }
         else
         {
@@ -370,19 +638,17 @@ void traiter_commande(int choix, int sock, char *role)
 int main(int argc, char *argv[])
 {
     // Vérifier si un port est passé en paramètre
-    int port;
     if (argc <= 1)
     {
-        port = 8080;
+        perror("Aucun port spécifié");
+        exit(1);
     }
-    else
+
+    int port = atoi(argv[1]);
+    if (!port)
     {
-        port = atoi(argv[1]);
-        if (!port)
-        {
-            perror("Veuillez saisir un port valide en paramètre");
-            exit(1);
-        }
+        perror("Veuilleez saisir un port valide en paramètre");
+        exit(1);
     }
 
     int sock;
@@ -408,11 +674,12 @@ int main(int argc, char *argv[])
 
     int choix;
     char role[20] = "aucun";
+    char buffer[10];
 
     // Boucle principale pour afficher le menu et traiter les options
     while (1)
     {
-        afficher_menu(role);
+        afficher_menu(sock, role);
 
         // Lire l'option avec fgets pour éviter les caractères invalides
         char buffer[10];
@@ -422,10 +689,9 @@ int main(int argc, char *argv[])
         if (sscanf(buffer, "%d", &choix) != 1)
         {
             printf("Entrée invalide, veuillez saisir un nombre.\n");
-            nettoyer_buffer(); // Nettoie le tampon pour éviter les caractères restants
-            continue;          // Redemander une entrée
+            fflush(stdin);
+            continue; // Redemander une entrée
         }
-
         traiter_commande(choix, sock, role);
     }
 
