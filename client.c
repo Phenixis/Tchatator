@@ -104,7 +104,6 @@ void connexion(int sock)
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
-    printf("Message envoyé: %s\n", requete);
 
     // Recevoir la réponse du serveur
     char buffer[1024];
