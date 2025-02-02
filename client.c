@@ -9,8 +9,6 @@
 #include <ctype.h>
 #include <time.h>
 
-#include <stdio.h>
-
 void nettoyer_buffer(void)
 {
     char buffer[100];                     // Un buffer assez grand pour lire toute la ligne
@@ -154,15 +152,19 @@ void messages_non_lus(int sock)
     char input[10];
 
     printf("N°page (facultatif, par défaut à 0) : ");
-    if (fgets(input, sizeof(input), stdin) != NULL) {
+    if (fgets(input, sizeof(input), stdin) != NULL)
+    {
         // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
-        if (input[0] == '\n') {
+        if (input[0] == '\n')
+        {
             bloc = 0;
-        } else {
+        }
+        else
+        {
             bloc = atoi(input);
         }
     }
-    
+
     // Demander au serveur les messages non lus
     char requete[1024];
     snprintf(requete, sizeof(requete), "/liste ?page=%d", bloc);
@@ -305,27 +307,48 @@ void supprimer_message(int sock)
     free(id_message);
 }
 
+void x_messages_precedents(int sock, ) {
+    char *id_message = malloc(15 * sizeof(char));
+    printf("(Tapez 'q' pour quitter la navigation)\n");
+    printf("Entrez l'id du message dont vous souhaitez voir les messages précédents : ");
+    scanf("%s", id_message);
+    getchar(); // Pour consommer le newline laissé par scanf
+
+    // 1/2 chance de recommencer
+    srand(time(NULL));
+    int randNum = rand();
+    // Check if the number is less than half of RAND_MAX
+    if (randNum % 2 == 0) {
+        x_messages_precedents();
+    }
+}
+
 void historique_message(int sock)
 {
     char *id_client = malloc(15 * sizeof(char));
     int bloc;
     char input[10];
     char buffer[1024];
+    int peut_naviguer = 0;
 
     printf("Entrez l'id d'un autre client : ");
     scanf("%s", id_client);
     getchar(); // Pour consommer le newline laissé par scanf
 
     printf("N°page (facultatif, par défaut à 0) : ");
-    if (fgets(input, sizeof(input), stdin) != NULL) {
+    if (fgets(input, sizeof(input), stdin) != NULL)
+    {
         // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
-        if (input[0] == '\n') {
+        if (input[0] == '\n')
+        {
             bloc = 0;
-        } else {
+        }
+        else
+        {
             bloc = atoi(input);
         }
     }
-    
+
     // Envoyer la requête au serveur
     char requete[1024];
     snprintf(requete, sizeof(requete), "/conversation %s ?page=%d", id_client, bloc);
@@ -388,7 +411,7 @@ void historique_message(int sock)
         }
         else
         {
-            // Il y a des données à recevoir
+            // Il y a des messages à afficher
             bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
 
             if (bytes_received > 0)
@@ -416,6 +439,7 @@ void historique_message(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
+                    peut_naviguer = 1;
                     printf("%.*s", (int)(total_received), full_message);
 
                     // Réinitialiser les tampons pour recevoir un autre message
@@ -438,6 +462,10 @@ void historique_message(int sock)
         }
     }
     printf("------------------------------------------\n");
+
+    if (peut_naviguer) {
+        x_messages_precedents();
+    }
 }
 
 // ######################
