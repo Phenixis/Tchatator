@@ -781,6 +781,7 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
                 {
+                    logs("Commande d'aide /connexion", id_compte_client, client_ip, verbose);
                     write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
@@ -945,6 +946,7 @@ int main(int argc, char *argv[])
                     if (PQntuples(res) > 0)
                     {
                         // Tout s'est bien passé
+                        logs("Messages non lus envoyés.", id_compte_client, client_ip, verbose);
                         send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                         send_messages_non_lus(conn, cnx, res, id_compte_client, client_ip, verbose);
                     }
@@ -953,10 +955,12 @@ int main(int argc, char *argv[])
                     {
                         if (atoi(bloc) <= 0)
                         {
+                            logs("Pas de messages non lus.", id_compte_client, client_ip, verbose);
                             send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
                         }
                         else
                         {
+                            logs("Page invalide.", id_compte_client, client_ip, verbose);
                             send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
                         }
                     }
@@ -973,6 +977,7 @@ int main(int argc, char *argv[])
                 // Ni pro ni membre
                 else if (role != MEMBRE && role != PRO)
                 {
+                    logs("Le client n'est pas connecté en tant que membre ou professionnel.", id_compte_client, client_ip, verbose);
                     send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
                 }
                 else
@@ -995,6 +1000,7 @@ int main(int argc, char *argv[])
                     PGresult *res = execute(conn, query);
                     if (PQntuples(res) <= 0)
                     {
+                        logs("Le client spécifié n'existe pas.", id_compte_client, client_ip, verbose);
                         send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     }
                     // Le client spécifié existe
@@ -1021,10 +1027,12 @@ int main(int argc, char *argv[])
                         {
                             if (atoi(bloc) <= 0)
                             {
+                                logs("Pas de messages avec ce client.", id_compte_client, client_ip, verbose);
                                 send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
                             }
                             else
                             {
+                                logs("Page invalide.", id_compte_client, client_ip, verbose);
                                 send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
                             }
                         }
@@ -1032,6 +1040,7 @@ int main(int argc, char *argv[])
                         else
                         {
                             // Tout s'est bien passé
+                            logs("Historique des messages envoyé.", id_compte_client, client_ip, verbose);
                             send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                             send_historique(cnx, res, id_compte_client, client_ip, verbose);
                         }
@@ -1200,6 +1209,7 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
                 {
+                    logs("Commande d'aide /supprime", id_compte_client, client_ip, verbose);
                     write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
@@ -1228,15 +1238,18 @@ int main(int argc, char *argv[])
 
                             snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_suppression = NOW() WHERE id = '%d' AND date_suppression IS NULL;", atoi(id_mesage));
                             execute(conn, query);
+                            logs("Message supprimé.", id_compte_client, client_ip, verbose);
                             send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                         }
                         else
                         {
+                            logs("Le client n'est pas l'envoyeur du message.", id_compte_client, client_ip, verbose);
                             send_answer(cnx, params, "403", id_compte_client, client_ip, verbose);
                         }
                     }
                     else
                     {
+                        logs("Le message n'existe pas.", id_compte_client, client_ip, verbose);
                         send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                     }
                 }
@@ -1380,11 +1393,12 @@ int main(int argc, char *argv[])
                     char query[256];
                     snprintf(query, sizeof(query), "INSERT INTO sae_db._bannissement (id_banni) VALUES ('%s');", id_client);
                     execute(conn, query);
-
+                    logs("Client banni.", id_compte_client, client_ip, verbose);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
                 {
+                    logs("Le client n'est pas connecté en tant qu'admin.", id_compte_client, client_ip, verbose);
                     send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
                 }
             }
@@ -1392,6 +1406,7 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
                 {
+                    logs("Commande d'aide /deban", id_compte_client, client_ip, verbose);
                     write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
@@ -1498,6 +1513,7 @@ int main(int argc, char *argv[])
                         file = fopen(log_file, "r");
                         if (!file)
                         {
+                            logs("Échec de l'ouverture du fichier de logs.", id_compte_client, client_ip, verbose);
                             perror("fopen failed");
                             send_answer(cnx, params, "500", id_compte_client, client_ip, verbose);
                         }
