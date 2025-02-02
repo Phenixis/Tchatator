@@ -786,6 +786,7 @@ int main(int argc, char *argv[])
 
     int choix;
     char role[20] = "aucun";
+    char buffer[10];
 
     // Boucle principale pour afficher le menu et traiter les options
     while (1)
