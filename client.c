@@ -802,7 +802,6 @@ void info_message(int sock)
     char buffer[1024];
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
     buffer[len] = '\0';
-    printf("Réponse du serveur: %s", buffer);
 
     ssize_t bytes_received;
     char full_message[10000];  // Tampon pour accumuler le message complet
@@ -834,7 +833,7 @@ void info_message(int sock)
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
             if (total_received > 0)
             {
-                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
                 {
                     printf("Vous n'avez aucun nouveau message\n");
                 }
@@ -883,7 +882,9 @@ void info_message(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    printf("%.*s", (int)(total_received), full_message);
+                    if(!code_to_message(full_message)) {
+                        printf("%.*s", (int)(total_received), full_message);
+                    }
 
                     // Réinitialiser les tampons pour recevoir un autre message
                     total_received = 0;
@@ -932,7 +933,9 @@ void modifier_message(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        printf("Réponse du serveur: %s", buffer);
+        if (!code_to_message(buffer)) {
+            printf("Réponse du serveur: %s", buffer);
+        }
     }
     else
     {
@@ -962,7 +965,9 @@ void bloquer_client(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        printf("Réponse du serveur: %s", buffer);
+        if (!code_to_message(buffer)) {
+            printf("Réponse du serveur: %s", buffer);
+        }
     }
     else
     {
@@ -992,7 +997,9 @@ void enlever_blocage(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        printf("Réponse du serveur: %s", buffer);
+        if (!code_to_message(buffer)) {
+            printf("Réponse du serveur: %s", buffer);
+        }
     }
     else
     {
@@ -1022,7 +1029,9 @@ void bannir_client(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        printf("Réponse du serveur: %s", buffer);
+        if (!code_to_message(buffer)) {
+            printf("Réponse du serveur: %s", buffer);
+        }
     }
     else
     {
@@ -1052,7 +1061,9 @@ void enlever_ban(int sock)
     if (recv_bytes > 0)
     {
         buffer[recv_bytes] = '\0';
-        printf("Réponse du serveur: %s", buffer);
+        if (!code_to_message(buffer)) {
+            printf("Réponse du serveur: %s", buffer);
+        }
     }
     else
     {
