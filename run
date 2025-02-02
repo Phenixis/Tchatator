@@ -5,7 +5,7 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-gcc -o "${1%.c}.out" "$1" -I/usr/include/postgresql -lpq -Wall
+gcc -o "${1%.c}.out" "$1" -I/usr/include/postgresql -lpq -w
 if [ $? -eq 0 ]; then
     ./"${1%.c}.out" "${@:2}"
     rm -f "${1%.c}.out"
