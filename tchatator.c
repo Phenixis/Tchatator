@@ -9,8 +9,10 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <libpq-fe.h>
-#define _XOPEN_SOURCE
 #include <time.h>
+#include <pthread.h>
+
+#define _XOPEN_SOURCE
 
 struct param
 {
@@ -584,8 +586,77 @@ int client_est_bloque(PGconn *conn, char *id_client, char *id_bloqueur)
     return result;
 }
 
+int compteur_minute = 0;
+int compteur_heure = 0;
+pthread_mutex_t compteur_mutex = PTHREAD_MUTEX_INITIALIZER;  // Mutex pour protéger le compteur
+
+// Fonction pour réinitialiser le compteur toutes les heures
+void* reset_heure(void* arg) {
+    time_t start_time, current_time;
+    start_time = time(NULL);
+
+    while (1) {
+        current_time = time(NULL);
+        
+        // Vérifier si une minute est écoulée
+        if (difftime(current_time, start_time) >= 3600) {
+            pthread_mutex_lock(&compteur_mutex);  // Verrouiller l'accès au compteur
+            compteur_minute = 0;  // Réinitialiser le compteur
+            printf("Compteur réinitialisé à %d\n", compteur_minute);
+            pthread_mutex_unlock(&compteur_mutex);  // Libérer l'accès au compteur
+
+            // Réinitialiser le temps de départ
+            start_time = current_time;
+        }
+
+        // Petite pause pour ne pas trop utiliser le processeur
+        sleep(1);
+    }
+
+    return NULL;
+}
+
+// Fonction pour réinitialiser le compteur toutes les minutes
+void* reset_minute(void* arg) {
+    time_t start_time, current_time;
+    start_time = time(NULL);
+
+    while (1) {
+        current_time = time(NULL);
+        
+        // Vérifier si une minute est écoulée
+        if (difftime(current_time, start_time) >= 60) {
+            pthread_mutex_lock(&compteur_mutex);  // Verrouiller l'accès au compteur
+            compteur_minute = 0;  // Réinitialiser le compteur
+            printf("Compteur réinitialisé à %d\n", compteur_minute);
+            pthread_mutex_unlock(&compteur_mutex);  // Libérer l'accès au compteur
+
+            // Réinitialiser le temps de départ
+            start_time = current_time;
+        }
+
+        // Petite pause pour ne pas trop utiliser le processeur
+        sleep(1);
+    }
+
+    return NULL;
+}
+
 int main(int argc, char *argv[])
 {
+    pthread_t thread_minute, thread_heure;
+
+    // Créer un thread pour réinitialiser le compteur
+    if (pthread_create(&thread_minute, NULL, reset_minute, NULL) != 0) {
+        perror("Erreur de création de thread");
+        return 1;
+    }
+    // Créer un thread pour réinitialiser le compteur des heures
+    if (pthread_create(&thread_heure, NULL, reset_heure, NULL) != 0) {
+        perror("Erreur de création de thread pour les heures");
+        return 1;
+    }
+
     char *param_file = ".tchatator"; // Fichier de paramètres par défaut
     int verbose = 0;
     Role role = AUCUN;
@@ -634,6 +705,8 @@ int main(int argc, char *argv[])
     struct sockaddr_in addr;
     int ret;
     char *portName = get_param(params, "socket_port");
+    int limite_minute = atoi(get_param(params, "max_requests_per_minute"));
+    int limite_heure = atoi(get_param(params, "max_requests_per_hour"));
     int port = atoi(portName);
     int port_max = port + 10;
     int size;
@@ -732,6 +805,10 @@ int main(int argc, char *argv[])
             sprintf(to_log, "Message reçu : %s", trimmed_buffer);
             logs(to_log, id_compte_client, client_ip, verbose);
 
+            // Incrémenter les compteurs de requête
+            compteur_heure ++;
+            compteur_minute ++;
+
             // ###############
             // # EXTRA UTILS #
             // ###############
@@ -766,6 +843,34 @@ int main(int argc, char *argv[])
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     break;
                 }
+            }
+            else if (strcmp(trimmed_buffer, "/quit") == 0) // Commande ADMIN pour arrêter le Tchatator
+            {
+                if (strcmp(id_compte_client, "admin") == 0)
+                {
+                    logs("Arrêt du Tchatator.", id_compte_client, client_ip, verbose);
+                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
+                    go_on = 1;
+                    break;
+                }
+                else
+                {
+                    logs("Le client n'est pas connecté en tant qu'admin.", id_compte_client, client_ip, verbose);
+                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose); // Si le client n'est pas admin, on fait comme si la commande n'existait pas
+                }
+            }
+            // Vérification : ne pas dépasser les limites de requêtes par minute / heure
+            else if (compteur_minute > limite_minute) {
+                sprintf(to_log, "Limite de requêtes dépassée à la minute ! [%d]", limite_minute);
+                logs(to_log, id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "429", id_compte_client, client_ip, verbose);
+                continue;;
+            }
+            else if (compteur_heure > limite_heure) {
+                sprintf(to_log, "Limite de requêtes dépassée à l'heure ! [%d]", limite_heure);
+                logs(to_log, id_compte_client, client_ip, verbose);
+                send_answer(cnx, params, "430", id_compte_client, client_ip, verbose);
+                continue;;
             }
             else if (strncmp(trimmed_buffer, "/connexion ", 10) == 0)
             {
@@ -1620,26 +1725,12 @@ int main(int argc, char *argv[])
                     send_answer(cnx, params, "401", id_compte_client, client_ip, verbose);
                 }
             }
-            else if (strcmp(trimmed_buffer, "/quit") == 0) // Commande ADMIN pour arrêter le Tchatator
-            {
-                if (strcmp(id_compte_client, "admin") == 0)
-                {
-                    logs("Arrêt du Tchatator.", id_compte_client, client_ip, verbose);
-                    send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                    go_on = 1;
-                    break;
-                }
-                else
-                {
-                    logs("Le client n'est pas connecté en tant qu'admin.", id_compte_client, client_ip, verbose);
-                    send_answer(cnx, params, "404", id_compte_client, client_ip, verbose); // Si le client n'est pas admin, on fait comme si la commande n'existait pas
-                }
-            }
             else
             {
                 logs("Commande invalide.", id_compte_client, client_ip, verbose);
                 send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
             }
+
         } while (len > 0);
 
         close(cnx);

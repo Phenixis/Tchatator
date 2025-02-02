@@ -15,6 +15,24 @@ void nettoyer_buffer(void)
     fgets(buffer, sizeof(buffer), stdin); // Lire et ignorer toute la ligne restante
 }
 
+/*
+Retourne 1 si un code spécifique a été détecté et un message ad hoc affiché
+*/
+int code_to_message(char* code_message) {
+    int returned = 1;
+    if (strcmp(trim_newline(code_message), "429/TOO MANY REQUESTS MINUTE") == 0)
+    {
+        printf("Vous avez envoyé trop de requêtes dans la même minute. Patientez.\n");
+    }
+    else if (strcmp(trim_newline(code_message), "430/TOO MANY REQUESTS HOUR") == 0)
+    {
+        printf("Vous avez envoyé trop de requêtes dans la même heure. Revenez ultérieurement.\n");
+    } else {
+        returned = 0;
+    }
+    return returned;
+}
+
 void afficher_menu(int sock, char *role)
 {
     // Si membre
@@ -108,9 +126,11 @@ void connexion(int sock)
     // Recevoir la réponse du serveur
     char buffer[1024];
     recv(sock, buffer, sizeof(buffer), 0);
-    printf("Réponse du serveur: %s", buffer);
+    if (!code_to_message(buffer) && (buffer, "200/OK") == 0) {
+        printf("Connecté\n");
+    }
 
-    free(api_key); // N'oubliez pas de libérer la mémoire allouée pour api_key
+    free(api_key); // Ne pas oublier de libérer la mémoire allouée pour api_key
 }
 
 void deconnexion(int sock)
@@ -154,10 +174,27 @@ char *trim_newline(const char *str)
 
 void logs(int sock)
 {
-    char *requete = "/logs";
+    int nb_logs;
+    char input[10];
+    printf("Nombre de logs (facultatif, par défaut à 50) : ");    
+    if (fgets(input, sizeof(input), stdin) != NULL)
+    {
+        // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
+        if (input[0] == '\n')
+        {
+            nb_logs = 50;
+        }
+        else
+        {
+            nb_logs = atoi(input);
+        }
+    }
+
+    char requete[1224];
+    snprintf(requete, sizeof(requete), "/logs %d", nb_logs);
     send(sock, requete, strlen(requete), 0);
 
-    char buffer[2048]; // Tampon pour réception
+    char buffer[1024]; // Tampon pour réception
     ssize_t bytes_received;
     char full_message[10000];  // Tampon pour accumuler le message complet
     size_t total_received = 0; // Taille totale des données reçues
@@ -188,21 +225,17 @@ void logs(int sock)
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
             if (total_received > 0)
             {
-                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
                 {
-                    printf("Vous n'avez aucun nouveau message\n");
+                    printf("Il n'y a pas de logs\n");
                 }
                 else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
                 {
-                    printf("Votre rôle actuel ne vous permet pas d'avoir des messages\n");
-                }
-                else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
-                {
-                    printf("La page que vous demandez n'existe pas\n");
+                    printf("Votre rôle actuel ne vous permet pas d'avoir les logs\n");
                 }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
-                    printf("Erreur du serveur lors de la lecture de vos messages");
+                    printf("Erreur du serveur lors de la lecture des logs");
                 }
             }
             break;
@@ -237,7 +270,9 @@ void logs(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    printf("%.*s", (int)(total_received), full_message);
+                    if (!code_to_message(full_message)) {
+                        printf("%.*s", (int)(total_received), full_message);
+                    }
 
                     // Réinitialiser les tampons pour recevoir un autre message
                     total_received = 0;
@@ -297,7 +332,9 @@ void envoyer_message(int sock)
     // Recevoir la réponse du serveur
     char buffer[1024];
     recv(sock, buffer, sizeof(buffer), 0);
-    printf("Réponse du serveur: %s", buffer);
+    if (!code_to_message(buffer)) {
+        printf("%s", buffer);
+    }
 }
 
 void messages_non_lus(int sock)
@@ -357,7 +394,7 @@ void messages_non_lus(int sock)
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
             if (total_received > 0)
             {
-                if (strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
+                if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
                 {
                     printf("Vous n'avez aucun nouveau message\n");
                 }
@@ -368,6 +405,14 @@ void messages_non_lus(int sock)
                 else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
                 {
                     printf("La page que vous demandez n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "429/TOO MANY REQUESTS MINUTE") == 0)
+                {
+                    printf("Vous avez envoyé trop de requêtes dans la même minute. Patientez.\n");
+                }
+                else if (strcmp(trim_newline(full_message), "430/TOO MANY REQUESTS HOUR") == 0)
+                {
+                    printf("Vous avez envoyé trop de requêtes dans la même heure. Revenez ultérieurement.\n");
                 }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
@@ -406,7 +451,9 @@ void messages_non_lus(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    printf("%.*s", (int)(total_received), full_message);
+                    if (!code_to_message(full_message)) {
+                        printf("%.*s", (int)(total_received), full_message);
+                    }
 
                     // Réinitialiser les tampons pour recevoir un autre message
                     total_received = 0;
@@ -448,14 +495,9 @@ void supprimer_message(int sock)
     // Recevoir la réponse du serveur
     char buffer[1024];
     int recv_bytes = recv(sock, buffer, sizeof(buffer), 0);
-    if (recv_bytes > 0)
-    {
-        buffer[recv_bytes] = '\0';
-        printf("Réponse du serveur: %s", buffer);
-    }
-    else
-    {
-        printf("Impossible de recevoir la réponse du serveur\n");
+    buffer[recv_bytes] = '\0';
+    if (!code_to_message(buffer)) {
+        printf("%s", buffer);
     }
     free(id_message);
 }
@@ -512,7 +554,7 @@ void x_messages_precedents(int sock, char *id_client)
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
             if (total_received > 0)
             {
-                if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
+                if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
                 {
                     printf("Ce le client ou message spécifié n'existe pas\n");
                 }
@@ -561,8 +603,10 @@ void x_messages_precedents(int sock, char *id_client)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    peut_naviguer = 1;
-                    printf("%.*s", (int)(total_received), full_message);
+                    if (!code_to_message(full_message)) {
+                        peut_naviguer = 1;
+                        printf("%.*s", (int)(total_received), full_message);
+                    }
 
                     // Réinitialiser les tampons pour recevoir un autre message
                     total_received = 0;
@@ -654,7 +698,7 @@ void historique_message(int sock)
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
             if (total_received > 0)
             {
-                if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
+                if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
                 {
                     printf("Ce client n'existe pas\n");
                 }
@@ -707,8 +751,10 @@ void historique_message(int sock)
                         memmove(full_message, full_message + 7, strlen(full_message) - 6);
                     }
 
-                    peut_naviguer = 1;
-                    printf("%.*s", (int)(total_received), full_message);
+                    if (!code_to_message(full_message)) {
+                        peut_naviguer = 1;
+                        printf("%.*s", (int)(total_received), full_message);
+                    }
 
                     // Réinitialiser les tampons pour recevoir un autre message
                     total_received = 0;
