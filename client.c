@@ -150,8 +150,22 @@ char *trim_newline(const char *str)
 
 void messages_non_lus(int sock)
 {
+    int bloc;
+    char input[10];
+
+    printf("N°page (facultatif, par défaut à 0) : ");
+    if (fgets(input, sizeof(input), stdin) != NULL) {
+        // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
+        if (input[0] == '\n') {
+            bloc = 0;
+        } else {
+            bloc = atoi(input);
+        }
+    }
+    
     // Demander au serveur les messages non lus
-    char *requete = "/liste";
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/liste %d", bloc);
     send(sock, requete, strlen(requete), 0);
 
     char buffer[1024]; // Tampon pour réception
@@ -197,7 +211,7 @@ void messages_non_lus(int sock)
                 }
                 else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
                 {
-                    printf("Le bloc indiqué n'existe pas\n");
+                    printf("La page que vous demandez n'existe pas\n");
                 }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
@@ -246,8 +260,8 @@ void messages_non_lus(int sock)
             else if (bytes_received == 0)
             {
                 // Le serveur a fermé la connexion
-                printf("Le serveur a terminé l'envoi des messages.\n");
-                break; // Sortir de la boucle
+                printf("Le serveur a clos la connexion.\n");
+                break;
             }
             else if (bytes_received == -1)
             {

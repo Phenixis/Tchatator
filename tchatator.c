@@ -237,17 +237,21 @@ char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int 
     int result;
     char query[256];
 
-    snprintf(query, sizeof(query), "SELECT count FROM sae_db.vue_nb_messages_non_lus WHERE id_receveur = '%s';", clientID);
-    PGresult *res = execute(conn, query);
-    if (PQntuples(res) > 0)
-    {
-        result = atoi(PQgetvalue(res, 0, 0));
-    }
-    else
-    {
+    if (strcmp(clientID, "") != 0) {
+        snprintf(query, sizeof(query), "SELECT count FROM sae_db.vue_nb_messages_non_lus WHERE id_receveur = '%s';", clientID);
+        PGresult *res = execute(conn, query);
+        if (PQntuples(res) > 0)
+        {
+            result = atoi(PQgetvalue(res, 0, 0));
+        }
+        else
+        {
+            result = 0;
+        }
+        PQclear(res);
+    } else {
         result = 0;
     }
-    PQclear(res);
 
     // Log le message
     size_t log_len = sizeof(int) + 100;
@@ -320,7 +324,7 @@ char send_role(int cnx, Role role, char *clientID, char *clientIP, int verbose)
     return 1; // Rôle envoyé avec succès
 }
 
-char send_messages_non_lus(int cnx, PGresult *res, char *clientID, char *clientIP, int verbose)
+char send_messages_non_lus(PGconn *conn, int cnx, PGresult *res, char *clientID, char *clientIP, int verbose)
 {
     int rows = PQntuples(res); // Nombre de lignes dans le résultat
     int i;
@@ -329,9 +333,10 @@ char send_messages_non_lus(int cnx, PGresult *res, char *clientID, char *clientI
     for (i = 0; i < rows; i++)
     {
         // Récupérer les valeurs des colonnes
-        const char *mail_envoyeur = PQgetvalue(res, i, 0);
-        const char *message = PQgetvalue(res, i, 1);
-        const char *date_envoi = PQgetvalue(res, i, 2);
+        const char *id_message = PQgetvalue(res, i, 0);
+        const char *mail_envoyeur = PQgetvalue(res, i, 1);
+        const char *message = PQgetvalue(res, i, 2);
+        const char *date_envoi = PQgetvalue(res, i, 3);
 
         // Vérifier que les valeurs ne sont pas NULL
         if (mail_envoyeur == NULL || date_envoi == NULL || message == NULL)
@@ -363,8 +368,13 @@ char send_messages_non_lus(int cnx, PGresult *res, char *clientID, char *clientI
             {
                 perror("Erreur d'envoi sur la socket");
                 return -1; // Erreur lors de l'envoi
+            } else {
+                // Marquer les messages comme lus dans la base de données
+                char query[256];
+                snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id='%s';", id_message);
+                execute(conn, query);
+                total_sent += sent_bytes; // Mettre à jour le nombre total de bytes envoyés
             }
-            total_sent += sent_bytes; // Mettre à jour le nombre total de bytes envoyés
         }
         size_t log_len = strlen(buffer) + 100;
         char *to_log = malloc(log_len);
@@ -558,6 +568,7 @@ int main(int argc, char *argv[])
     int size;
     int cnx;
     struct sockaddr_in conn_addr;
+    char *taille_bloc = get_param(params, "taille_bloc");
 
     // Création de la socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -765,7 +776,7 @@ int main(int argc, char *argv[])
             if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
             {
                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                write(cnx, "Usage: /liste\nAffiche la liste de vos messages non lus.\n", 57);
+                write(cnx, "Usage: /liste {?page=0}\nAffiche la liste de vos messages non lus.\n", 57);
             }
             // Si pas connecté (ou admin)
             else if (role == AUCUN || role == ADMIN)
@@ -775,9 +786,16 @@ int main(int argc, char *argv[])
             // Si connecté
             else
             {
+                // Prendre en compte le bloc donné s'il y en a un
+                char *bloc = trimmed_buffer + 7;
+                if (strcmp(bloc, "") == 0) {
+                    strcpy(bloc, "0"); // bloc de messages 0 par défaut
+                }
+                int offset = atoi(bloc) * atoi(taille_bloc);
+
                 // Regarder s'il y a des messages dans la boîte de messages non lus
                 char query[256];
-                snprintf(query, sizeof(query), "SELECT email_envoyeur, message, date_envoi FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s';", id_compte_client);
+                snprintf(query, sizeof(query), "SELECT id, email_envoyeur, message, date_envoi_affichee FROM sae_db.vue_messages_non_lus WHERE id_receveur = '%s' OFFSET '%d' LIMIT '%s';", id_compte_client, offset, taille_bloc);
                 PGresult *res = execute(conn, query);
 
                 // Cas 1 : il y a des messages non lus dans sa boîte
@@ -785,17 +803,16 @@ int main(int argc, char *argv[])
                 {
                     // Tout s'est bien passé
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                    send_messages_non_lus(cnx, res, id_compte_client, client_ip, verbose);
-
-                    // Marquer les messages comme lus dans la base de données
-                    char query[256];
-                    snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id_receveur = '%s' AND date_lecture IS NULL;", id_compte_client);
-                    execute(conn, query);
+                    send_messages_non_lus(conn, cnx, res, id_compte_client, client_ip, verbose);
                 }
-                // Cas 2 : il n'y a aucun message non lu dans sa boîte
+                // Cas 2 : il n'y a aucun message
                 else
                 {
-                    send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                    if (strcmp(bloc, "0") == 0) {
+                        send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                    } else {
+                        send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+                    }
                 }
             }
         }
@@ -883,13 +900,13 @@ int main(int argc, char *argv[])
 
                 if (is_positive_integer(id_mesage))
                 {
-                    snprintf(query, sizeof(query), "SELECT id_envoyeur FROM sae_db._message WHERE id = '%s';", id_mesage);
+                    snprintf(query, sizeof(query), "SELECT id_envoyeur FROM sae_db._message WHERE id = '%s' AND date_suppression IS NULL;", id_mesage);
                     res = execute(conn, query);
                 }
 
+                // Le message existe-t-il ?
                 if (PQntuples(res) > 0)
                 {
-
                     // Vérifier si ce message est à nous
                     if (atoi(PQgetvalue(res, 0, 0)) == atoi(id_compte_client))
                     {
@@ -898,16 +915,8 @@ int main(int argc, char *argv[])
                         char query[256];
 
                         snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_suppression = NOW() WHERE id = '%d' AND date_suppression IS NULL;", atoi(id_mesage));
-                        res = execute(conn, query);
-
-                        if (atoi(PQcmdTuples(res)) > 0)
-                        {
-                            send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
-                        }
-                        else
-                        {
-                            send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
-                        }
+                        execute(conn, query);
+                        send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     }
                     else
                     {
