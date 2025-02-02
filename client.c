@@ -131,6 +131,7 @@ void synchroniser_params(int sock)
 
     char buffer[1024];
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    buffer[len] = '\0';
     printf("Réponse du serveur: %s", buffer);
 }
 
@@ -141,6 +142,7 @@ void logs(int sock)
 
     char buffer[1024];
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    buffer[len] = '\0';
     printf("Réponse du serveur: %s", buffer);
 
     if (strncmp(buffer, "200/OK", 6) == 0)
@@ -185,6 +187,7 @@ void fermer_service(int sock)
     char buffer[1024];
     nettoyer_buffer();
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
+    buffer[len] = '\0';
     printf("Réponse du serveur: %s", buffer);
 
     close(sock);
