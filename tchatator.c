@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <libpq-fe.h>
+#define _XOPEN_SOURCE
 #include <time.h>
 
 struct param
