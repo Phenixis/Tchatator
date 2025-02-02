@@ -15,6 +15,24 @@ void nettoyer_buffer(void)
     fgets(buffer, sizeof(buffer), stdin); // Lire et ignorer toute la ligne restante
 }
 
+char *trim_newline(const char *str)
+{
+    int len = strlen(str);
+    char *trimmed_str = (char *)malloc(len + 1);
+    if (!trimmed_str)
+    {
+        perror("malloc failed");
+        exit(1);
+    }
+    strcpy(trimmed_str, str);
+    while (len > 0 && (trimmed_str[len - 1] == '\n' || trimmed_str[len - 1] == '\r' || isspace(trimmed_str[len - 1])))
+    {
+        trimmed_str[len - 1] = '\0';
+        len--;
+    }
+    return trimmed_str;
+}
+
 /*
 Retourne 1 si un code spécifique a été détecté et un message ad hoc affiché
 */
@@ -152,24 +170,6 @@ void synchroniser_params(int sock)
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
     buffer[len] = '\0';
     printf("Réponse du serveur: %s", buffer);
-}
-
-char *trim_newline(const char *str)
-{
-    int len = strlen(str);
-    char *trimmed_str = (char *)malloc(len + 1);
-    if (!trimmed_str)
-    {
-        perror("malloc failed");
-        exit(1);
-    }
-    strcpy(trimmed_str, str);
-    while (len > 0 && (trimmed_str[len - 1] == '\n' || trimmed_str[len - 1] == '\r' || isspace(trimmed_str[len - 1])))
-    {
-        trimmed_str[len - 1] = '\0';
-        len--;
-    }
-    return trimmed_str;
 }
 
 void logs(int sock)
@@ -1151,7 +1151,6 @@ void traiter_commande(int choix, int sock, char *role)
             synchroniser_params(sock);
         }
         break;
-
     case 6:
         if (strcmp(role, "aucun") == 0)
         {
@@ -1198,7 +1197,7 @@ void traiter_commande(int choix, int sock, char *role)
         break;
 
     case 9:
-        if (strcmp(role, "pro"))
+        if (strcmp(role, "pro") == 0)
         {
             deconnexion(sock);
         }

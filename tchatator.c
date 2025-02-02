@@ -602,7 +602,6 @@ void* reset_heure(void* arg) {
         if (difftime(current_time, start_time) >= 3600) {
             pthread_mutex_lock(&compteur_mutex);  // Verrouiller l'accès au compteur
             compteur_minute = 0;  // Réinitialiser le compteur
-            printf("Compteur réinitialisé à %d\n", compteur_minute);
             pthread_mutex_unlock(&compteur_mutex);  // Libérer l'accès au compteur
 
             // Réinitialiser le temps de départ
@@ -628,7 +627,6 @@ void* reset_minute(void* arg) {
         if (difftime(current_time, start_time) >= 60) {
             pthread_mutex_lock(&compteur_mutex);  // Verrouiller l'accès au compteur
             compteur_minute = 0;  // Réinitialiser le compteur
-            printf("Compteur réinitialisé à %d\n", compteur_minute);
             pthread_mutex_unlock(&compteur_mutex);  // Libérer l'accès au compteur
 
             // Réinitialiser le temps de départ
