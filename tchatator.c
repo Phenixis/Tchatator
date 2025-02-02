@@ -237,7 +237,8 @@ char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int 
     int result;
     char query[256];
 
-    if (strcmp(clientID, "") != 0) {
+    if (strcmp(clientID, "") != 0)
+    {
         snprintf(query, sizeof(query), "SELECT count FROM sae_db.vue_nb_messages_non_lus WHERE id_receveur = '%s';", clientID);
         PGresult *res = execute(conn, query);
         if (PQntuples(res) > 0)
@@ -249,7 +250,9 @@ char send_nb_non_lus(int cnx, PGconn *conn, char *clientID, char *clientIP, int 
             result = 0;
         }
         PQclear(res);
-    } else {
+    }
+    else
+    {
         result = 0;
     }
 
@@ -368,7 +371,9 @@ char send_messages_non_lus(PGconn *conn, int cnx, PGresult *res, char *clientID,
             {
                 perror("Erreur d'envoi sur la socket");
                 return -1; // Erreur lors de l'envoi
-            } else {
+            }
+            else
+            {
                 // Marquer les messages comme lus dans la base de données
                 char query[256];
                 snprintf(query, sizeof(query), "UPDATE sae_db._message SET date_lecture = NOW() WHERE id='%s';", id_message);
@@ -787,11 +792,16 @@ int main(int argc, char *argv[])
             else
             {
                 // Prendre en compte le bloc donné s'il y en a un
-                char *bloc = trimmed_buffer + 7;
-                if (strcmp(bloc, "") == 0) {
-                    strcpy(bloc, "0"); // bloc de messages 0 par défaut
+                char *bloc_param = strstr(trimmed_buffer, "?page=");
+                char *bloc = "0";
+                if (bloc_param != NULL && strcmp(bloc_param + 6, "") != 0)
+                {
+                    bloc = bloc_param + 6; // `?page=` fait 6 caractères, on saute cette partie
                 }
                 int offset = atoi(bloc) * atoi(taille_bloc);
+                if (offset < 0) {
+                    offset = 0;
+                }
 
                 // Regarder s'il y a des messages dans la boîte de messages non lus
                 char query[256];
@@ -808,9 +818,12 @@ int main(int argc, char *argv[])
                 // Cas 2 : il n'y a aucun message
                 else
                 {
-                    if (strcmp(bloc, "0") == 0) {
+                    if (atoi(bloc) <= 0)
+                    {
                         send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
-                    } else {
+                    }
+                    else
+                    {
                         send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
                     }
                 }
@@ -831,8 +844,19 @@ int main(int argc, char *argv[])
             // Pro
             else
             {
-                // L'autre client spécifié n'existe pas
-                char *id_client = trimmed_buffer + 14;
+                // Extraire l'id_client
+                char *id_client_start = trimmed_buffer + 14;
+                char *space_pos = strchr(id_client_start, ' ');
+
+                char id_client[10];
+                if (space_pos != NULL) {
+                    strncpy(id_client, id_client_start, space_pos - id_client_start);
+                    id_client[space_pos - id_client_start] = '\0'; // Terminer la chaîne
+                } else {
+                    // Si pas d'espace, alors l'ID client est jusqu'à la fin
+                    strcpy(id_client, id_client_start);
+                }
+                
                 char query[512];
                 snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
                 PGresult *res = execute(conn, query);
@@ -840,17 +864,38 @@ int main(int argc, char *argv[])
                 {
                     send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                 }
-
+                // Le client spécifié existe
                 else
                 {
-                    snprintf(query, sizeof(query), "SELECT email_envoyeur, email_receveur, message, date_envoi FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s');", id_compte_client, id_client, id_client, id_compte_client);
+                    // Prendre en compte le bloc donné s'il y en a un
+                    char *bloc_param = strstr(trimmed_buffer, "?page=");
+                    char *bloc = "0";
+                    if (bloc_param != NULL && strcmp(bloc_param + 6, "") != 0)
+                    {
+                        bloc = bloc_param + 6; // `?page=` fait 6 caractères, on saute cette partie
+                    }
+                    int offset = atoi(bloc) * atoi(taille_bloc);
+                    if (offset < 0) {
+                        offset = 0;
+                    }
+                    
+                    // Obtenir les messages avec ce client spécifique
+                    snprintf(query, sizeof(query), "SELECT email_envoyeur, email_receveur, message, date_envoi_affichee FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s') OFFSET '%d' LIMIT '%s';", id_compte_client, id_client, id_client, id_compte_client, offset, taille_bloc);
                     res = execute(conn, query);
-                    // N'a jamais échangé avec cet autre client
+
+                    // Pas d'obtention de messages
                     if (PQntuples(res) <= 0)
                     {
-                        send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                        if (atoi(bloc) <= 0)
+                        {
+                            send_answer(cnx, params, "204", id_compte_client, client_ip, verbose);
+                        }
+                        else
+                        {
+                            send_answer(cnx, params, "416", id_compte_client, client_ip, verbose);
+                        }
                     }
-                    // A déjà échangé avec cet autre client
+                    // On obtient des messages
                     else
                     {
                         // Tout s'est bien passé

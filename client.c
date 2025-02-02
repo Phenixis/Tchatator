@@ -165,7 +165,7 @@ void messages_non_lus(int sock)
     
     // Demander au serveur les messages non lus
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/liste %d", bloc);
+    snprintf(requete, sizeof(requete), "/liste ?page=%d", bloc);
     send(sock, requete, strlen(requete), 0);
 
     char buffer[1024]; // Tampon pour réception
@@ -305,23 +305,30 @@ void supprimer_message(int sock)
     free(id_message);
 }
 
-// ######################
-// FONCTIONS A TERMINER #
-// ######################
 void historique_message(int sock)
 {
     char *id_client = malloc(15 * sizeof(char));
+    int bloc;
+    char input[10];
     char buffer[1024];
 
     printf("Entrez l'id d'un autre client : ");
     scanf("%s", id_client);
     getchar(); // Pour consommer le newline laissé par scanf
 
-    // Construire la requête /supprime
-    char requete[1024];
-    snprintf(requete, sizeof(requete), "/conversation %s", id_client);
-
+    printf("N°page (facultatif, par défaut à 0) : ");
+    if (fgets(input, sizeof(input), stdin) != NULL) {
+        // Si l'utilisateur appuie juste sur entrée (input est une chaîne vide)
+        if (input[0] == '\n') {
+            bloc = 0;
+        } else {
+            bloc = atoi(input);
+        }
+    }
+    
     // Envoyer la requête au serveur
+    char requete[1024];
+    snprintf(requete, sizeof(requete), "/conversation %s ?page=%d", id_client, bloc);
     send(sock, requete, strlen(requete), 0);
 
     ssize_t bytes_received;
@@ -370,7 +377,7 @@ void historique_message(int sock)
                 }
                 else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
                 {
-                    printf("Le bloc indiqué n'existe pas\n");
+                    printf("La page demandée n'existe pas\n");
                 }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
@@ -433,6 +440,9 @@ void historique_message(int sock)
     printf("------------------------------------------\n");
 }
 
+// ######################
+// FONCTIONS A TERMINER #
+// ######################
 void info_message(int sock)
 {
     char *requete = "/liste";
