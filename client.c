@@ -41,11 +41,11 @@ int code_to_message(char *code_message)
     int returned = 1;
     if (strcmp(trim_newline(code_message), "430/TOO MANY REQUESTS HOUR") == 0)
     {
-        printf("Vous avez envoyé trop de requêtes dans la même heure. Revenez ultérieurement.\n");
+        printf("Vous avez envoyé trop de requêtes dans la même heure. Revenez ultérieurement\n");
     }
     else if (strcmp(trim_newline(code_message), "429/TOO MANY REQUESTS MINUTE") == 0)
     {
-        printf("Vous avez envoyé trop de requêtes dans la même minute. Veuillez patientez.\n");
+        printf("Vous avez envoyé trop de requêtes dans la même minute. Veuillez patientez\n");
     }
     else
     {
@@ -150,13 +150,21 @@ void connexion(int sock)
     buffer[bytes_received] = '\0';
     if (!code_to_message(buffer))
     {
-        if (strcmp(buffer, "200/OK") == 0)
+        if (strcmp(trim_newline(buffer), "200/OK") == 0)
         {
             printf("Connecté\n");
         }
-        else if (strcmp(buffer, "404/NOT FOUND"))
+        else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
         {
-            printf("Cette clé API n'existe pas\n");
+            printf("Cette clé d'API n'existe pas\n");
+        }
+        else if (strcmp(trim_newline(buffer), "403/FORBIDDEN") == 0)
+        {
+            printf("Vous avez été banni. Connexion refusée\n");
+        }
+        else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+        {
+            printf("Commande invalide\n");
         }
     }
 
@@ -165,7 +173,7 @@ void connexion(int sock)
 
 void deconnexion(int sock)
 {
-    printf("Merci d'avoir utilisé Tchatator...\n");
+    printf("Merci d'avoir utilisé Tchatator..\n");
     char *requete = "/deconnexion";
     send(sock, requete, strlen(requete), 0);
 
@@ -181,7 +189,17 @@ void synchroniser_params(int sock)
     char buffer[1024];
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
     buffer[len] = '\0';
-    printf("Réponse du serveur: %s", buffer);
+    if (!code_to_message(buffer))
+    {
+        if (strcmp(trim_newline(buffer), "200/OK") == 0)
+        {
+            printf("Fichier de paramètrage synchronisé\n");
+        }
+        else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
+        {
+            printf("Vous n'avez pas le droit car vous n'êtes pas administrateur\n");
+        }
+    }
 }
 
 void logs(int sock)
@@ -241,9 +259,12 @@ void logs(int sock)
                 {
                     printf("Il n'y a pas de logs\n");
                 }
-                else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
+                else if (strcmp(trim_newline(full_message), "401/UNAUTHORIZED") == 0)
                 {
-                    printf("Votre rôle actuel ne vous permet pas d'avoir les logs\n");
+                    printf("Vous n'avez pas l'accès aux logs car vous n'êtes pas administrateur\n");
+                }else if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
+                {
+                    printf("Commande invalide\n");
                 }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
@@ -269,7 +290,7 @@ void logs(int sock)
                 }
                 else
                 {
-                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues\n");
                     break;
                 }
 
@@ -295,7 +316,7 @@ void logs(int sock)
             else if (bytes_received == 0)
             {
                 // Le serveur a fermé la connexion
-                printf("Le serveur a clos la connexion.\n");
+                printf("Le serveur a clos la connexion\n");
                 break;
             }
             else if (bytes_received == -1)
@@ -316,7 +337,7 @@ void fermer_service(int sock)
     char buffer[1024];
     ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
     buffer[len] = '\0';
-    printf("Réponse du serveur: %s", buffer);
+    printf("Merci d'avoir utilisé Tchatator\n");
 
     close(sock);
     exit(0);
@@ -344,10 +365,34 @@ void envoyer_message(int sock)
 
     // Recevoir la réponse du serveur
     char buffer[1024];
-    recv(sock, buffer, sizeof(buffer), 0);
+    int bytes_r = recv(sock, buffer, sizeof(buffer), 0);
+    buffer[bytes_r] = '\0';
     if (!code_to_message(buffer))
     {
-        printf("%s", buffer);
+        if (strcmp(trim_newline(buffer), "409/CONFLICT") == 0)
+        {
+            printf("Vous ne pouvez pas envoyer un message à un compte du même type de vous (membre / pro)\n");
+        }
+        else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+        {
+            printf("Le compte ciblé n'existe pas\n");
+        }
+        else if (strcmp(trim_newline(buffer), "403/FORBIDDEN") == 0)
+        {
+            printf("Vous êtes bloqué par le receveur ou bloquez le receveur\n");
+        }
+        else if (strcmp(trim_newline(buffer), "413/PAYLOAD TOO LARGE") == 0)
+        {
+            printf("Votre message est trop long\n");
+        }
+        else if (strcmp(trim_newline(buffer), "413/UNAUTHORIZED") == 0)
+        {
+            printf("Votre rôle ne permet pas cette action ou la commande est invalide\n");
+        }
+        else if (strcmp(trim_newline(buffer), "200/OK") == 0)
+        {
+            printf("Message envoyé\n");
+        }
     }
 }
 
@@ -410,7 +455,7 @@ void messages_non_lus(int sock)
             {
                 if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
                 {
-                    printf("Vous n'avez aucun nouveau message\n");
+                    printf("Vous n'avez aucun nouveau message non lu\n");
                 }
                 else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
                 {
@@ -444,7 +489,7 @@ void messages_non_lus(int sock)
                 }
                 else
                 {
-                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues\n");
                     break;
                 }
 
@@ -470,7 +515,7 @@ void messages_non_lus(int sock)
             else if (bytes_received == 0)
             {
                 // Le serveur a fermé la connexion
-                printf("Le serveur a clos la connexion.\n");
+                printf("Le serveur a clos la connexion\n");
                 break;
             }
             else if (bytes_received == -1)
@@ -505,7 +550,18 @@ void supprimer_message(int sock)
     buffer[recv_bytes] = '\0';
     if (!code_to_message(buffer))
     {
-        printf("%s", buffer);
+        if (strcmp(trim_newline(buffer), "200/OK") == 0)
+        {
+            printf("Message supprimé\n");
+        }
+        else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+        {
+            printf("Le message à supprimer n'existe pas\n");
+        }
+        else if (strcmp(trim_newline(buffer), "403/FORBIDDEN") == 0)
+        {
+            printf("Vous n'êtes pas l'auteur de ce message\n");
+        }
     }
     free(id_message);
 }
@@ -598,7 +654,7 @@ void x_messages_precedents(int sock, char *id_client)
                 }
                 else
                 {
-                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues\n");
                     break;
                 }
 
@@ -625,7 +681,7 @@ void x_messages_precedents(int sock, char *id_client)
             else if (bytes_received == 0)
             {
                 // Le serveur a fermé la connexion
-                printf("Le serveur est clos.\n");
+                printf("Le serveur est clos\n");
                 break; // Sortir de la boucle
             }
             else if (bytes_received == -1)
@@ -747,7 +803,7 @@ void historique_message(int sock)
                 }
                 else
                 {
-                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues\n");
                     break;
                 }
 
@@ -810,9 +866,6 @@ void info_message(int sock)
 
     // Recevoir la réponse du serveur
     char buffer[1024];
-    ssize_t len = recv(sock, buffer, sizeof(buffer), 0);
-    buffer[len] = '\0';
-
     ssize_t bytes_received;
     char full_message[10000];  // Tampon pour accumuler le message complet
     size_t total_received = 0; // Taille totale des données reçues
@@ -843,17 +896,17 @@ void info_message(int sock)
             // Plus rien reçu dans les dernières 200ms, sortie de la boucle
             if (total_received > 0)
             {
-                if (!code_to_message(full_message) && strcmp(trim_newline(full_message), "204/NO CONTENT") == 0)
-                {
-                    printf("Vous n'avez aucun nouveau message\n");
-                }
-                else if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
+                if (strcmp(trim_newline(full_message), "403/FORBIDDEN") == 0)
                 {
                     printf("Votre rôle actuel ne vous permet pas d'avoir des messages\n");
                 }
-                else if (strcmp(trim_newline(full_message), "416/RANGE NOT SATISFIABLE") == 0)
+                else if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
                 {
-                    printf("La page que vous demandez n'existe pas\n");
+                    printf("Le message n'existe pas\n");
+                }
+                else if (strcmp(trim_newline(full_message), "401/UNAUTHORIZED") == 0)
+                {
+                    printf("Le client n'est pas connecté en tant que membre ou professionnel\n");
                 }
                 else if (strcmp(trim_newline(full_message), "500/INTERNAL SERVER ERROR") == 0)
                 {
@@ -879,12 +932,12 @@ void info_message(int sock)
                 }
                 else
                 {
-                    fprintf(stderr, "Le tampon de réception est plein, données perdues.\n");
+                    fprintf(stderr, "Le tampon de réception est plein, données perdues\n");
                     break;
                 }
 
                 // Vérifier si un message complet a été reçu (en supposant que chaque message se termine par "\n\n")
-                if (strstr(full_message, "\n") != NULL)
+                if (strstr(full_message, "\n\n") != NULL)
                 {
                     // Traiter le message complet
                     if (strncmp(full_message, "200/OK\n", 7) == 0)
@@ -905,7 +958,7 @@ void info_message(int sock)
             else if (bytes_received == 0)
             {
                 // Le serveur a fermé la connexion
-                printf("Le serveur a clos la connexion.\n");
+                printf("Le serveur a clos la connexion\n");
                 break;
             }
             else if (bytes_received == -1)
@@ -946,7 +999,26 @@ void modifier_message(int sock)
         buffer[recv_bytes] = '\0';
         if (!code_to_message(buffer))
         {
-            printf("Réponse du serveur: %s", buffer);
+            if (strcmp(trim_newline(buffer), "200/OK") == 0)
+            {
+                printf("Message modifié\n");
+            }
+            else if (strcmp(trim_newline(buffer), "413/PAYLOAD TOO LARGE") == 0)
+            {
+                printf("Nouveau message trop long\n");
+            }
+            else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+            {
+                printf("Le message à remplacer n'existe pas\n");
+            }
+            else if (strcmp(trim_newline(buffer), "403/FORBIDDEN") == 0)
+            {
+                printf("Vous n'êtes pas l'auteur de ce message\n");
+            }
+            else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
+            {
+                printf("Votre rôle ne vous permet pas d'avoir de messages\n");
+            }
         }
     }
     else
@@ -979,7 +1051,22 @@ void bloquer_client(int sock)
         buffer[recv_bytes] = '\0';
         if (!code_to_message(buffer))
         {
-            printf("Réponse du serveur: %s", buffer);
+            if (strcmp(trim_newline(buffer), "200/OK") == 0)
+            {
+                printf("Client bloqué\n");
+            }
+            else if (strcmp(trim_newline(buffer), "409/CONFLICT") == 0)
+            {
+                printf("Ce client est déjà bloqué\n");
+            }
+            else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+            {
+                printf("Le client à bloquer n'existe pas\n");
+            }
+            else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
+            {
+                printf("Votre rôle ne vous permet pas de bloquer des comptes\n");
+            }
         }
     }
     else
@@ -1012,7 +1099,22 @@ void enlever_blocage(int sock)
         buffer[recv_bytes] = '\0';
         if (!code_to_message(buffer))
         {
-            printf("Réponse du serveur: %s", buffer);
+            if (strcmp(trim_newline(buffer), "200/OK") == 0)
+            {
+                printf("Client débloqué\n");
+            }
+            else if (strcmp(trim_newline(buffer), "409/CONFLICT") == 0)
+            {
+                printf("Ce client n'était pas bloqué\n");
+            }
+            else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+            {
+                printf("Le client à débloquer n'existe pas\n");
+            }
+            else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
+            {
+                printf("Votre rôle ne vous permet pas de débloquer des comptes\n");
+            }
         }
     }
     else
@@ -1045,7 +1147,22 @@ void bannir_client(int sock)
         buffer[recv_bytes] = '\0';
         if (!code_to_message(buffer))
         {
-            printf("Réponse du serveur: %s", buffer);
+            if (strcmp(trim_newline(buffer), "200/OK") == 0)
+            {
+                printf("Client banni\n");
+            }
+            else if (strcmp(trim_newline(buffer), "409/CONFLICT") == 0)
+            {
+                printf("Ce client est déjà banni\n");
+            }
+            else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+            {
+                printf("Le client à bannir n'existe pas\n");
+            }
+            else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
+            {
+                printf("Votre rôle ne vous permet pas de bannir des comptes\n");
+            }
         }
     }
     else
@@ -1078,7 +1195,22 @@ void enlever_ban(int sock)
         buffer[recv_bytes] = '\0';
         if (!code_to_message(buffer))
         {
-            printf("Réponse du serveur: %s", buffer);
+            if (strcmp(trim_newline(buffer), "200/OK") == 0)
+            {
+                printf("Client débanni\n");
+            }
+            else if (strcmp(trim_newline(buffer), "409/CONFLICT") == 0)
+            {
+                printf("Ce client n'était pas banni\n");
+            }
+            else if (strcmp(trim_newline(buffer), "404/NOT FOUND") == 0)
+            {
+                printf("Le client à débannir n'existe pas\n");
+            }
+            else if (strcmp(trim_newline(buffer), "401/UNAUTHORIZED") == 0)
+            {
+                printf("Votre rôle ne vous permet pas de débannir des comptes\n");
+            }
         }
     }
     else
@@ -1125,7 +1257,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 3:
         if (strcmp(role, "aucun") == 0)
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
@@ -1141,7 +1273,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 4:
         if (strcmp(role, "aucun") == 0)
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
@@ -1156,7 +1288,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 5:
         if (strcmp(role, "aucun") == 0)
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
@@ -1170,7 +1302,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 6:
         if (strcmp(role, "aucun") == 0)
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         else if (strcmp(role, "membre") == 0 || strcmp(role, "pro") == 0)
         {
@@ -1185,7 +1317,7 @@ void traiter_commande(int choix, int sock, char *role)
     case 7:
         if (strcmp(role, "aucun") == 0)
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         else if (strcmp(role, "membre") == 0 || strcmp(role, "admin") == 0)
         {
@@ -1208,7 +1340,7 @@ void traiter_commande(int choix, int sock, char *role)
         }
         else
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         break;
 
@@ -1219,11 +1351,11 @@ void traiter_commande(int choix, int sock, char *role)
         }
         else
         {
-            printf("Option invalide.\n");
+            printf("Option invalide\n");
         }
         break;
     default:
-        printf("Option invalide.\n");
+        printf("Option invalide\n");
     }
 }
 
@@ -1279,7 +1411,7 @@ int main(int argc, char *argv[])
         // Vérifier si l'entrée est un nombre valide
         if (sscanf(buffer, "%d", &choix) != 1)
         {
-            printf("Entrée invalide, veuillez saisir un nombre.\n");
+            printf("Entrée invalide, veuillez saisir un nombre\n");
             fflush(stdin);
             continue; // Redemander une entrée
         }

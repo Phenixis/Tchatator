@@ -518,7 +518,7 @@ int client_existe(PGconn *conn, char *id_client)
 int message_existe(PGconn *conn, char *id_message)
 {
     char query[256];
-    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s';", id_message);
+    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s' AND date_suppression IS NULL;", id_message);
     PGresult *res = execute(conn, query);
     int result = PQntuples(res);
     PQclear(res);
@@ -588,21 +588,24 @@ int client_est_bloque(PGconn *conn, char *id_client, char *id_bloqueur)
 
 int compteur_minute = 0;
 int compteur_heure = 0;
-pthread_mutex_t compteur_mutex = PTHREAD_MUTEX_INITIALIZER;  // Mutex pour protéger le compteur
+pthread_mutex_t compteur_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex pour protéger le compteur
 
 // Fonction pour réinitialiser le compteur toutes les heures
-void* reset_heure(void* arg) {
+void *reset_heure(void *arg)
+{
     time_t start_time, current_time;
     start_time = time(NULL);
 
-    while (1) {
+    while (1)
+    {
         current_time = time(NULL);
-        
+
         // Vérifier si une minute est écoulée
-        if (difftime(current_time, start_time) >= 3600) {
-            pthread_mutex_lock(&compteur_mutex);  // Verrouiller l'accès au compteur
-            compteur_minute = 0;  // Réinitialiser le compteur
-            pthread_mutex_unlock(&compteur_mutex);  // Libérer l'accès au compteur
+        if (difftime(current_time, start_time) >= 3600)
+        {
+            pthread_mutex_lock(&compteur_mutex);   // Verrouiller l'accès au compteur
+            compteur_minute = 0;                   // Réinitialiser le compteur
+            pthread_mutex_unlock(&compteur_mutex); // Libérer l'accès au compteur
 
             // Réinitialiser le temps de départ
             start_time = current_time;
@@ -616,18 +619,21 @@ void* reset_heure(void* arg) {
 }
 
 // Fonction pour réinitialiser le compteur toutes les minutes
-void* reset_minute(void* arg) {
+void *reset_minute(void *arg)
+{
     time_t start_time, current_time;
     start_time = time(NULL);
 
-    while (1) {
+    while (1)
+    {
         current_time = time(NULL);
-        
+
         // Vérifier si une minute est écoulée
-        if (difftime(current_time, start_time) >= 60) {
-            pthread_mutex_lock(&compteur_mutex);  // Verrouiller l'accès au compteur
-            compteur_minute = 0;  // Réinitialiser le compteur
-            pthread_mutex_unlock(&compteur_mutex);  // Libérer l'accès au compteur
+        if (difftime(current_time, start_time) >= 60)
+        {
+            pthread_mutex_lock(&compteur_mutex);   // Verrouiller l'accès au compteur
+            compteur_minute = 0;                   // Réinitialiser le compteur
+            pthread_mutex_unlock(&compteur_mutex); // Libérer l'accès au compteur
 
             // Réinitialiser le temps de départ
             start_time = current_time;
@@ -645,12 +651,14 @@ int main(int argc, char *argv[])
     pthread_t thread_minute, thread_heure;
 
     // Créer un thread pour réinitialiser le compteur
-    if (pthread_create(&thread_minute, NULL, reset_minute, NULL) != 0) {
+    if (pthread_create(&thread_minute, NULL, reset_minute, NULL) != 0)
+    {
         perror("Erreur de création de thread");
         return 1;
     }
     // Créer un thread pour réinitialiser le compteur des heures
-    if (pthread_create(&thread_heure, NULL, reset_heure, NULL) != 0) {
+    if (pthread_create(&thread_heure, NULL, reset_heure, NULL) != 0)
+    {
         perror("Erreur de création de thread pour les heures");
         return 1;
     }
@@ -793,10 +801,8 @@ int main(int argc, char *argv[])
 
         do
         {
-            printf("Compteurs : %d et %d alors que %d et %d\n", compteur_minute, compteur_heure, limite_minute, limite_heure);
             free(trimmed_buffer);
             len = read(cnx, buffer, sizeof(buffer) - 1);
-            printf("Reçu : %s\n", buffer);
             buffer[len] = '\0';
             trimmed_buffer = trim_newline(buffer);
 
@@ -806,8 +812,8 @@ int main(int argc, char *argv[])
             logs(to_log, id_compte_client, client_ip, verbose);
 
             // Incrémenter les compteurs de requête
-            compteur_heure ++;
-            compteur_minute ++;
+            compteur_heure++;
+            compteur_minute++;
 
             // ###############
             // # EXTRA UTILS #
@@ -816,15 +822,15 @@ int main(int argc, char *argv[])
             {
                 logs("Commande /nb_non_lus", id_compte_client, client_ip, verbose);
                 send_nb_non_lus(cnx, conn, id_compte_client, client_ip, verbose);
-                compteur_minute --;
-                compteur_heure --;
+                compteur_minute--;
+                compteur_heure--;
             }
             else if (strncmp(trimmed_buffer, "/role", 5) == 0)
             {
                 logs("Commande /role", id_compte_client, client_ip, verbose);
                 send_role(cnx, role, id_compte_client, client_ip, verbose);
-                compteur_minute --;
-                compteur_heure --;
+                compteur_minute--;
+                compteur_heure--;
             }
 
             // ###########################
@@ -844,6 +850,8 @@ int main(int argc, char *argv[])
                     logs("Commande /deconnexion", id_compte_client, client_ip, verbose);
                     strcpy(id_compte_client, "");
                     role = AUCUN;
+                    compteur_minute = 0;
+                    compteur_heure = 0;
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                     break;
                 }
@@ -864,13 +872,15 @@ int main(int argc, char *argv[])
                 }
             }
             // Vérification : ne pas dépasser les limites de requêtes par minute / heure
-            else if (compteur_minute > limite_minute) {
+            else if (compteur_minute > limite_minute)
+            {
                 sprintf(to_log, "Limite de requêtes dépassée à la minute ! [%d]", limite_minute);
                 logs(to_log, id_compte_client, client_ip, verbose);
                 send_answer(cnx, params, "429", id_compte_client, client_ip, verbose);
                 continue;
             }
-            else if (compteur_heure > limite_heure) {
+            else if (compteur_heure > limite_heure)
+            {
                 sprintf(to_log, "Limite de requêtes dépassée à l'heure ! [%d]", limite_heure);
                 logs(to_log, id_compte_client, client_ip, verbose);
                 send_answer(cnx, params, "430", id_compte_client, client_ip, verbose);
@@ -881,7 +891,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/connexion -h") == 0 || strcmp(trimmed_buffer, "/connexion --help") == 0)
                 {
                     logs("Commande d'aide /connexion", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}.\n", 88);
+                    write(cnx, "Usage: /connexion {API_KEY}\nConnecte au compte du client avec la clé d'API {API_KEY}\n", 88);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strncmp(trimmed_buffer, "/connexion tchatator_", 21) == 0)
@@ -954,7 +964,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/message -h") == 0 || strcmp(trimmed_buffer, "/message --help") == 0)
                 {
                     logs("Commande d'aide /message", id_compte_client, client_ip, verbose);
-                    char *help_message = "Usage: /message {id_compte} {message}\nEnvoie un message au compte spécifié.\n";
+                    char *help_message = "Usage: /message {id_compte} {message}\nEnvoie un message au compte spécifié\n";
                     write(cnx, help_message, strlen(help_message));
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
@@ -1013,7 +1023,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/liste -h") == 0 || strcmp(trimmed_buffer, "/liste --help") == 0)
                 {
                     logs("Commande d'aide /liste", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus.\n", 63);
+                    write(cnx, "Usage: /liste {page=0}\nAffiche la liste de vos messages non lus\n", 63);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 // Si pas connecté ou admin, aucun message non lu (no content)
@@ -1032,7 +1042,8 @@ int main(int argc, char *argv[])
                         bloc = bloc_param + 6; // `?page=` fait 6 caractères, on saute cette partie
                     }
                     int offset = atoi(bloc) * atoi(taille_bloc);
-                    if (offset < 0) {
+                    if (offset < 0)
+                    {
                         offset = 0;
                     }
 
@@ -1070,7 +1081,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/conversation -h") == 0 || strcmp(trimmed_buffer, "/conversation --help") == 0)
                 {
                     logs("Commande d'aide /conversation", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié.\n", 105);
+                    write(cnx, "Usage: /conversation {id_client} {?page=0}\nAffiche l'historique des messages avec le client spécifié\n", 105);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 // Ni pro ni membre
@@ -1086,19 +1097,24 @@ int main(int argc, char *argv[])
                     char *space_pos = strchr(id_client_start, ' ');
 
                     char id_client[10];
-                    if (space_pos != NULL) {
+                    if (space_pos != NULL)
+                    {
                         strncpy(id_client, id_client_start, space_pos - id_client_start);
                         id_client[space_pos - id_client_start] = '\0'; // Terminer la chaîne
-                    } else {
+                    }
+                    else
+                    {
                         // Si pas d'espace, alors l'ID client est jusqu'à la fin
                         strcpy(id_client, id_client_start);
                     }
 
-                    if (!is_positive_integer(id_client)) {
+                    if (!is_positive_integer(id_client))
+                    {
+                        logs("Le client spécifié n'existe pas.", id_compte_client, client_ip, verbose);
                         send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                         continue;
                     }
-                    
+
                     char query[2048];
                     snprintf(query, sizeof(query), "SELECT id_compte FROM sae_db._membre WHERE id_compte = '%s' UNION SELECT id_compte FROM sae_db._professionnel WHERE id_compte = '%s';", id_client, id_client);
                     PGresult *res = execute(conn, query);
@@ -1118,10 +1134,11 @@ int main(int argc, char *argv[])
                             bloc = bloc_param + 6; // `?page=` fait 6 caractères, on saute cette partie
                         }
                         int offset = atoi(bloc) * atoi(taille_bloc);
-                        if (offset < 0) {
+                        if (offset < 0)
+                        {
                             offset = 0;
                         }
-                        
+
                         // Obtenir les messages avec ce client spécifique
                         snprintf(query, sizeof(query), "SELECT id, email_envoyeur, email_receveur, message, date_envoi_affichee FROM sae_db.vue_historique_message WHERE (id_envoyeur = '%s' AND id_receveur = '%s') OR (id_envoyeur = '%s' AND id_receveur = '%s') OFFSET '%d' LIMIT '%s';", id_compte_client, id_client, id_client, id_compte_client, offset, taille_bloc);
                         res = execute(conn, query);
@@ -1151,10 +1168,12 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-            else if (strncmp(trimmed_buffer, "/precedent", 10) == 0) {
-                if (strcmp(trimmed_buffer, "/precedent -h") == 0) {
+            else if (strncmp(trimmed_buffer, "/precedent", 10) == 0)
+            {
+                if (strcmp(trimmed_buffer, "/precedent -h") == 0)
+                {
                     logs("Commande d'aide /precedent", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /precedent {id_client} {id_message}\nAffiche les messages précédant le message spécifié de la conversation avec le client spécifié.\n", 75);
+                    write(cnx, "Usage: /precedent {id_client} {id_message}\nAffiche les messages précédant le message spécifié de la conversation avec le client spécifié\n", 75);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 // Ni pro ni membre
@@ -1167,7 +1186,8 @@ int main(int argc, char *argv[])
                 {
                     char id_client[10];
                     char id_message[10];
-                    if (sscanf(buffer, "/precedent %9s %9s", id_client, id_message) != 2 || !is_positive_integer(id_client) || !is_positive_integer(id_message)) {
+                    if (sscanf(buffer, "/precedent %9s %9s", id_client, id_message) != 2 || !is_positive_integer(id_client) || !is_positive_integer(id_message))
+                    {
                         send_answer(cnx, params, "404", id_compte_client, client_ip, verbose);
                         continue;
                     }
@@ -1183,24 +1203,24 @@ int main(int argc, char *argv[])
                     else
                     {
                         // Obtenir les messages avec le client + message spécifiés
-                        snprintf(query, sizeof(query)," SELECT id, email_envoyeur, email_receveur, message, date_envoi_affichee"
-                                                      " FROM sae_db.vue_historique_message"
-                                                      " WHERE date_envoi < ("
-                                                      "      SELECT date_envoi"
-                                                      "      FROM sae_db.vue_historique_message"
-                                                      "      WHERE id = '%s'"
-                                                      "      AND ("
-                                                      "         (id_envoyeur = '%s' AND id_receveur = '%s') OR "
-                                                      "         (id_envoyeur = '%s' AND id_receveur = '%s')"
-                                                      "      )"
-                                                      "  )"
-                                                      "  AND ("
-                                                      "      (id_envoyeur = '%s' AND id_receveur = '%s') OR "
-                                                      "      (id_envoyeur = '%s' AND id_receveur = '%s')"
-                                                      "  )"
-                                                      "  ORDER BY date_envoi DESC"
-                                                      "  LIMIT '%s';"
-                        , id_message, id_compte_client, id_client, id_client, id_compte_client, id_compte_client, id_client, id_client, id_compte_client, taille_bloc);
+                        snprintf(query, sizeof(query), " SELECT id, email_envoyeur, email_receveur, message, date_envoi_affichee"
+                                                       " FROM sae_db.vue_historique_message"
+                                                       " WHERE date_envoi < ("
+                                                       "      SELECT date_envoi"
+                                                       "      FROM sae_db.vue_historique_message"
+                                                       "      WHERE id = '%s'"
+                                                       "      AND ("
+                                                       "         (id_envoyeur = '%s' AND id_receveur = '%s') OR "
+                                                       "         (id_envoyeur = '%s' AND id_receveur = '%s')"
+                                                       "      )"
+                                                       "  )"
+                                                       "  AND ("
+                                                       "      (id_envoyeur = '%s' AND id_receveur = '%s') OR "
+                                                       "      (id_envoyeur = '%s' AND id_receveur = '%s')"
+                                                       "  )"
+                                                       "  ORDER BY date_envoi DESC"
+                                                       "  LIMIT '%s';",
+                                 id_message, id_compte_client, id_client, id_client, id_compte_client, id_compte_client, id_client, id_client, id_compte_client, taille_bloc);
                         res = execute(conn, query);
 
                         // Pas d'obtention de messages
@@ -1225,15 +1245,14 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/info -h") == 0 || strcmp(trimmed_buffer, "/info --help") == 0)
                 {
                     logs("Commande d'aide /info", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié.\n", 75);
+                    write(cnx, "Usage: /info {id_message}\nAffiche les informations du message spécifié\n", 75);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (client_est_membre(conn, id_compte_client) > 0 || client_est_pro(conn, id_compte_client) > 0)
                 {
-                    logs("Le client est connecté en tant que membre ou professionnel.", id_compte_client, client_ip, verbose);
                     char *id_message = trimmed_buffer + 6;
                     char query[256];
-                    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s';", id_message);
+                    snprintf(query, sizeof(query), "SELECT * FROM sae_db._message WHERE id = '%s' AND date_suppression IS NULL;", id_message);
                     PGresult *res = execute(conn, query);
 
                     if (PQntuples(res) == 0)
@@ -1303,7 +1322,7 @@ int main(int argc, char *argv[])
                             {
                                 send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                                 snprintf(info_message, strlen(id_envoyeur) + strlen(id_receveur) + strlen(message) + strlen(modifie) + strlen(date_modification) + strlen(lu) + strlen(date_lecture) + strlen(date_envoi) + 200,
-                                         "\"%s\", %s %s à %s.\nÉtat: %s%s, Statut: %s%s.\n",
+                                         "\"%s\", %s %s à %s\nÉtat: %s%s, Statut: %s%s\n\n",
                                          message,
                                          (strcmp(id_compte_client, id_receveur) == 0) ? "Envoyé par" : "Reçu par",
                                          (strcmp(id_compte_client, id_receveur) == 0) ? id_envoyeur : id_receveur,
@@ -1336,7 +1355,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/modifie -h") == 0 || strcmp(trimmed_buffer, "/modifie --help") == 0)
                 {
                     logs("Commande d'aide /modifie", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié.\n", 79);
+                    write(cnx, "Usage: /modifie {id_message} {nouveau_message}\nRemplace le contenu du message spécifié\n", 79);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "") != 0 && strcmp(id_compte_client, "admin") != 0)
@@ -1383,7 +1402,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/supprime -h") == 0 || strcmp(trimmed_buffer, "/supprime --help") == 0)
                 {
                     logs("Commande d'aide /supprime", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié.\n", 63);
+                    write(cnx, "Usage: /supprime {id_message}\nSupprime le message spécifié\n", 63);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else
@@ -1436,7 +1455,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/bloque -h") == 0 || strcmp(trimmed_buffer, "/bloque --help") == 0)
                 {
                     logs("Commande d'aide /bloque", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié.\n", 57);
+                    write(cnx, "Usage: /bloque {id_client}\nBloque le client spécifié\n", 57);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "admin") == 0 || client_est_pro(conn, id_compte_client) > 0)
@@ -1481,7 +1500,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/debloque -h") == 0 || strcmp(trimmed_buffer, "/debloque --help") == 0)
                 {
                     logs("Commande d'aide /debloque", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié.\n", 57);
+                    write(cnx, "Usage: /debloque {id_client}\nLève le blocage d'un client spécifié\n", 57);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "admin") == 0 || client_est_pro(conn, id_compte_client) > 0)
@@ -1543,7 +1562,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/ban -h") == 0 || strcmp(trimmed_buffer, "/ban --help") == 0)
                 {
                     logs("Commande d'aide /ban", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié.\n", 54);
+                    write(cnx, "Usage: /ban {id_client}\nBannit le client spécifié\n", 54);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "admin") == 0)
@@ -1580,7 +1599,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/deban -h") == 0 || strcmp(trimmed_buffer, "/deban --help") == 0)
                 {
                     logs("Commande d'aide /deban", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié.\n", 71);
+                    write(cnx, "Usage: /deban {id_client}\nLève le bannissement du client spécifié\n", 71);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "admin") == 0)
@@ -1622,7 +1641,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/sync -h") == 0 || strcmp(trimmed_buffer, "/sync --help") == 0)
                 {
                     logs("Commande d'aide /sync", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage.\n", 51);
+                    write(cnx, "Usage: /sync\nRecharge le fichier de paramétrage\n", 51);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "admin") == 0)
@@ -1642,7 +1661,7 @@ int main(int argc, char *argv[])
                 if (strcmp(trimmed_buffer, "/logs -h") == 0 || strcmp(trimmed_buffer, "/logs --help") == 0)
                 {
                     logs("Commande d'aide /logs", id_compte_client, client_ip, verbose);
-                    write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs.\n", 46);
+                    write(cnx, "Usage: /logs {?nb_logs=50}\nAffiche les logs\n", 46);
                     send_answer(cnx, params, "200", id_compte_client, client_ip, verbose);
                 }
                 else if (strcmp(id_compte_client, "admin") == 0)

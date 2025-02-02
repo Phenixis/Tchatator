@@ -82,3 +82,5 @@ Un nombre limite de requêtes est accepté dans la même minute et la même heur
 Le nombre de messages affichées au sein d'une même page est configurable dans le fichier ```.tchatator```
 
 Si vous n'indiquez aucune page lors de l'affichage d'un grand nombre de message, la page par défaut est 0.
+
+Vous ne pouvez pas envoyer de message contentant d'apostrophe ou de guillemets.
