@@ -131,11 +131,11 @@ void update_role(int sock, char *role)
 
 void connexion(int sock)
 {
-    char *api_key = malloc(100 * sizeof(char)); // Allocation de mémoire pour api_key
+    char api_key[100];
 
     printf("Entrez votre clé API: ");
     scanf("%s", api_key);
-    getchar(); // Pour consommer le newline laissé par scanf
+    getchar();
 
     // Construire la requête /connexion
     char requete[1024];
@@ -262,7 +262,8 @@ void logs(int sock)
                 else if (strcmp(trim_newline(full_message), "401/UNAUTHORIZED") == 0)
                 {
                     printf("Vous n'avez pas l'accès aux logs car vous n'êtes pas administrateur\n");
-                }else if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
+                }
+                else if (strcmp(trim_newline(full_message), "404/NOT FOUND") == 0)
                 {
                     printf("Commande invalide\n");
                 }
@@ -347,10 +348,17 @@ void envoyer_message(int sock)
 {
     int id_compte;
     char message[1024];
+    char input[100];
 
+    // Format de l'input
     printf("Entrez l'ID du compte: ");
-    scanf("%d", &id_compte);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_compte) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     printf("Entrez le message à envoyer: ");
     fgets(message, sizeof(message), stdin);
@@ -531,15 +539,22 @@ void messages_non_lus(int sock)
 
 void supprimer_message(int sock)
 {
-    char *id_message = malloc(15 * sizeof(char));
+    int id_message;
+    char input[100];
 
+    // Format de l'input
     printf("Entrez l'id du message : ");
-    scanf("%s", id_message);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", id_message) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     // Construire la requête /supprime
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/supprime %s", id_message);
+    snprintf(requete, sizeof(requete), "/supprime %d", id_message);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
@@ -570,11 +585,19 @@ void x_messages_precedents(int sock, char *id_client)
 {
     int peut_naviguer;
     char buffer[1024];
-    char *id_message = malloc(15 * sizeof(char));
+    char input[100];
+    int id_message;
+
+    // Format de l'input
     printf("(Tapez 'q' pour quitter la navigation)\n");
     printf("Entrez l'id du message dont vous souhaitez voir les messages précédents : ");
-    scanf("%s", id_message);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", id_message) != 1)
+    {
+        printf("Entrée invalide\n");
+        fflush(stdin);
+        return;
+    }
 
     if (strcmp(id_message, "q") == 0)
     {
@@ -583,7 +606,7 @@ void x_messages_precedents(int sock, char *id_client)
 
     // Envoyer la requête au serveur
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/precedent %s %s", id_client, id_message);
+    snprintf(requete, sizeof(requete), "/precedent %d %d", id_client, id_message);
     send(sock, requete, strlen(requete), 0);
 
     ssize_t bytes_received;
@@ -702,15 +725,21 @@ void x_messages_precedents(int sock, char *id_client)
 
 void historique_message(int sock)
 {
-    char *id_client = malloc(15 * sizeof(char));
+    int id_client;
     int bloc;
     char input[10];
     char buffer[1024];
     int peut_naviguer = 0;
 
+    // Format de l'input
     printf("Entrez l'id d'un autre client : ");
-    scanf("%s", id_client);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_client) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     printf("N°page (facultatif, par défaut à 0) : ");
     if (fgets(input, sizeof(input), stdin) != NULL)
@@ -728,7 +757,7 @@ void historique_message(int sock)
 
     // Envoyer la requête au serveur
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/conversation %s ?page=%d", id_client, bloc);
+    snprintf(requete, sizeof(requete), "/conversation %d ?page=%d", id_client, bloc);
     send(sock, requete, strlen(requete), 0);
 
     ssize_t bytes_received;
@@ -851,15 +880,22 @@ void historique_message(int sock)
 
 void info_message(int sock)
 {
-    char id_message[50];
+    int id_message;
+    char input[10];
 
+    // Format de l'input
     printf("Entrez l'identifiant du message : ");
-    fgets(id_message, sizeof(id_message), stdin);
-    id_message[strcspn(id_message, "\n")] = 0; // Supprimer le newline à la fin de l'identifiant
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_message) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     // Construire la requête /info
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/info %s", id_message);
+    snprintf(requete, sizeof(requete), "/info %d", id_message);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
@@ -973,12 +1009,19 @@ void info_message(int sock)
 
 void modifier_message(int sock)
 {
-    char *id_message = malloc(15 * sizeof(char));
+    int id_message;
     char message[1024];
+    char input[10];
 
+    // Format de l'input
     printf("Entrez l'id du message : ");
-    scanf("%s", id_message);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_message) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     printf("Entrez le nouveau message : ");
     fgets(message, sizeof(message), stdin);
@@ -986,7 +1029,7 @@ void modifier_message(int sock)
 
     // Construire la requête /modifie
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/modifie %s %s", id_message, message);
+    snprintf(requete, sizeof(requete), "/modifie %d %s", id_message, message);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
@@ -1030,15 +1073,22 @@ void modifier_message(int sock)
 
 void bloquer_client(int sock)
 {
-    char *id_client = malloc(15 * sizeof(char));
+    int id_client;
+    char input[10];
 
+    // Format de l'input
     printf("Entrez l'id du client : ");
-    scanf("%s", id_client);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_client) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     // Construire la requête /bloque
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/bloque %s", id_client);
+    snprintf(requete, sizeof(requete), "/bloque %d", id_client);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
@@ -1078,15 +1128,22 @@ void bloquer_client(int sock)
 
 void enlever_blocage(int sock)
 {
-    char *id_client = malloc(15 * sizeof(char));
+    int id_client;
+    char input[10];
 
+    // Format de l'input
     printf("Entrez l'id du client : ");
-    scanf("%s", id_client);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_client) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     // Construire la requête /debloque
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/debloque %s", id_client);
+    snprintf(requete, sizeof(requete), "/debloque %d", id_client);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
@@ -1126,15 +1183,22 @@ void enlever_blocage(int sock)
 
 void bannir_client(int sock)
 {
-    char *id_client = malloc(15 * sizeof(char));
+    int id_client;
+    char input[10];
 
+    // Format de l'input
     printf("Entrez l'id du client : ");
-    scanf("%s", id_client);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_client) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     // Construire la requête /ban
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/ban %s", id_client);
+    snprintf(requete, sizeof(requete), "/ban %d", id_client);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
@@ -1174,15 +1238,22 @@ void bannir_client(int sock)
 
 void enlever_ban(int sock)
 {
-    char *id_client = malloc(15 * sizeof(char));
+    int id_client;
+    char input[10];
 
+    // Format de l'input
     printf("Entrez l'id du client : ");
-    scanf("%s", id_client);
-    getchar(); // Pour consommer le newline laissé par scanf
+    fgets(input, sizeof(input), stdin);
+    if (sscanf(input, "%d", &id_client) != 1)
+    {
+        printf("Entrée invalide, veuillez saisir un nombre\n");
+        fflush(stdin);
+        return;
+    }
 
     // Construire la requête /deban
     char requete[1024];
-    snprintf(requete, sizeof(requete), "/deban %s", id_client);
+    snprintf(requete, sizeof(requete), "/deban %d", id_client);
 
     // Envoyer la requête au serveur
     send(sock, requete, strlen(requete), 0);
